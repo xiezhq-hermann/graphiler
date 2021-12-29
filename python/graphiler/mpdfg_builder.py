@@ -1,11 +1,10 @@
 import sys
 import inspect
-from typing import Dict
 from pathlib import Path
 
 import torch
 from graphiler import EdgeBatchDummy, NodeBatchDummy
-from graphiler.mpdfg import builder
+from graphiler.mpdfg import builder, MPDFGAnnotation
 
 DGL_PATH = str(Path.home()) + "/.dgl/"
 sys.path.append(DGL_PATH)
@@ -16,17 +15,20 @@ sys.path.append(DGL_PATH)
 FuncTemplate = r'''
 import torch
 from typing import Dict
+from pathlib import Path
+# torch.classes.load_library(str(Path.home()) + "/.dgl/libgraphiler.so")
 
-def mpdfg_func(ndata: Dict[str, torch.Tensor], edata: Dict[str, torch.Tensor], __extra__):
-    res = {'h': torch.ones(1)}
-    return res
+def mpdfg_func(dglgraph: torch.classes.my_classes.DGLGraph, 
+                ndata: Dict[str, torch.Tensor], edata: Dict[str, torch.Tensor],
+                ntypedata: Dict[str, torch.Tensor], etypedata: Dict[str, torch.Tensor], __extra__):
+    return {'h':torch.tensor(0)}
 '''
 
 
 class MPDFG():
     def __init__(self, func) -> None:
         self.forward = func
-        self.annotations = torch.classes.my_classes.MPDFGAnnotation()
+        self.annotations = MPDFGAnnotation(func.graph)
 
 
 def mpdfg_builder(msg_func, reduce_func, update_func=None):
@@ -52,6 +54,8 @@ def mpdfg_builder(msg_func, reduce_func, update_func=None):
     from mpdfg_temp import mpdfg_func
     mpdfg_func = torch.jit.script(mpdfg_func)
     mpdfg = MPDFG(mpdfg_func)
-    builder(mpdfg.forward.graph, mpdfg.annotations,
-            msg_func, reduce_func, update_func)
+    print(msg_func)
+    print(reduce_func)
+    builder(mpdfg.annotations, msg_func, reduce_func, update_func)
+    print(mpdfg.forward.graph)
     return mpdfg
