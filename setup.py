@@ -13,7 +13,7 @@ setup(
         CppExtension('graphiler.mpdfg', [
             'src/pybind.cpp',
             'src/builder.cpp',
-            'src/mpdfg.cpp'
+            'src/dglgraph.cpp'
         ]),
     ],
     cmdclass={

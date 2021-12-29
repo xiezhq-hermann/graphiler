@@ -7,7 +7,7 @@ include_directories("include")
 
 # Define our library target
 add_library(graphiler SHARED
-    src/mpdfg.cpp)
+    src/dglgraph.cpp)
 
 # Enable C++14
 target_compile_features(graphiler PRIVATE cxx_std_14)

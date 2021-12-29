@@ -21,12 +21,12 @@ struct DGLGraph : torch::CustomClassHolder {
         COO_src(COO_src), COO_dst(COO_dst), ntype_pointer(ntype_pointer),
         etype_pointer(etype_pointer){};
 
-  // for message reduce
+  // for message reduce, or CSC format
   torch::Tensor in_pointer;
   torch::Tensor in_node_indices;
   torch::Tensor in_edge_indices;
 
-  // for message creation
+  // for message creation, or CSR format
   torch::Tensor out_pointer;
   torch::Tensor out_node_indices;
   torch::Tensor out_edge_indices;
