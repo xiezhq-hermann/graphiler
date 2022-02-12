@@ -57,6 +57,8 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
   for (auto n : in_block->nodes()) {
     std::string n_kind = n->kind().toQualString();
 
+    // Todo: modularize different parts of the function
+
     // find the root varibles through DGL APIs
     // Todo: GetAttr or CallMethod?
     if ((n_kind == std::string("prim::GetAttr")) &&
@@ -167,17 +169,14 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
     // default movement types of operators
     mpdfg->data_movement[new_node] = Movement::Dense;
 
-    auto first_output_id = new_node->outputs()[0]->unique();
     // operator specific semantics
-    if (n_kind == std::string("prim::Constant")) {
-      mpdfg->data_residency[first_output_id] = Residency::Shared;
-    } else if (n_kind == std::string("aten::__getitem__")) {
-      mpdfg->data_residency[first_output_id] = new_inputs_residency[0];
+    auto first_output_id = new_node->outputs()[0]->unique();
+    if (n_kind == std::string("aten::__getitem__")) {
       auto v_id = n->inputs()[0]->unique();
-      auto v_residency = mpdfg->data_residency[VALUE_MAP[v_id]->unique()];
       if (VALUE_TO_BROADCAST.find(v_id) != VALUE_TO_BROADCAST.end()) {
-        // insert broadcast operator for data fetching
+        // insert broadcast operator for data fetching on demand
         NodeKind new_kind;
+        auto v_residency = mpdfg->data_residency[VALUE_MAP[v_id]->unique()];
         switch (VALUE_TO_BROADCAST[v_id]) {
         case Movement::BroadcastSrc:
           new_kind =
@@ -204,32 +203,18 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
         auto broadcast_node = mpdfg->DFG->create(new_kind, broadcast_inputs, 1);
         broadcast_node->insertAfter(new_node);
         VALUE_MAP[n->output()->unique()] = broadcast_node->output();
+        // message creation stage is edge centric
+        // while other two are node centric
         mpdfg->data_residency[broadcast_node->output()->unique()] =
             (stage == Stage::Creation) ? Residency::Edge : Residency::Node;
         mpdfg->data_movement[broadcast_node] = VALUE_TO_BROADCAST[v_id];
-      }
-    } else if ((n_kind == std::string("aten::mm")) ||
-               (n_kind == std::string("prim::ListConstruct")) ||
-               (n_kind == std::string("aten::relu")) ||
-               (n_kind == std::string("aten::mul"))) {
-      // dense operators
-      if (std::equal(new_inputs_residency.begin() + 1,
-                     new_inputs_residency.end(),
-                     new_inputs_residency.begin())) {
-        mpdfg->data_residency[first_output_id] = new_inputs_residency[0];
       } else {
-        assert(new_inputs_residency.find(Residency::Shared) !=
-               new_inputs_residency.end());
-        Residency r_dominant = Residency::Shared;
-        for (auto r : new_inputs_residency) {
-          assert((r == Residency::Shared) || (r == r_dominant));
-          if (r != Residency::Shared) {
-            r_dominant = r;
-          }
-        }
-        mpdfg->data_residency[first_output_id] = r_dominant;
+        // ordinary __getitem__, no broadcast involved
+        mpdfg->data_residency[first_output_id] = new_inputs_residency[0];
       }
-    } else if (n_kind == std::string("aten::cat")) {
+    }
+    // semantic checking for known operators
+    else if (n_kind == std::string("aten::cat")) {
       if (new_inputs_residency[0] != Residency::Shared) {
         // if input0 is data associated with graph, e.g., [ndata0, ndata1]
         // for 2D matrix (N, f), the dim should only be 1
@@ -252,7 +237,35 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
       }
       mpdfg->data_residency[first_output_id] = new_inputs_residency[0];
     }
-    // Todo: more operators
+    // Default semantic for Constant and other operators without inputs
+    else if ((n_kind == std::string("prim::Constant")) ||
+             (new_inputs_residency.size() == 0)) {
+      mpdfg->data_residency[first_output_id] = Residency::Shared;
+    }
+    // Default semantic for dense operators
+    else {
+      if (std::equal(new_inputs_residency.begin() + 1,
+                     new_inputs_residency.end(),
+                     new_inputs_residency.begin())) {
+        mpdfg->data_residency[first_output_id] = new_inputs_residency[0];
+      } else {
+        assert(new_inputs_residency.find(Residency::Shared) !=
+               new_inputs_residency.end());
+        Residency r_dominant = Residency::Shared;
+        for (auto r : new_inputs_residency) {
+          assert((r == Residency::Shared) || (r == r_dominant));
+          if (r != Residency::Shared) {
+            r_dominant = r;
+          }
+        }
+        mpdfg->data_residency[first_output_id] = r_dominant;
+      }
+      // Todo: warning if operator not known
+      // (n_kind == std::string("aten::mm")) ||
+      //     (n_kind == std::string("prim::ListConstruct")) ||
+      //     (n_kind == std::string("aten::relu")) ||
+      //     (n_kind == std::string("aten::mul"))
+    }
 
     // propagate constants
     auto optional_outputs = runNodeIfInputsAreConstant(n);

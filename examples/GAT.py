@@ -21,7 +21,7 @@ def message_func(edges: EdgeBatchDummy, fc_weight, attn_weight):
 
 
 def reduce_func(nodes: NodeBatchDummy):
-    alpha = torch.softmax(nodes.mailbox['e'], dim=1, dtype=torch.float)
+    alpha = torch.softmax(nodes.mailbox['e'], dim=1)
     h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
     return {'h': h}
 
