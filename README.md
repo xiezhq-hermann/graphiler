@@ -25,5 +25,5 @@ The simplest way to reproduce the artifact is to use docker.
 
 ```
 docker build -f docker/Dockerfile -t graphiler .
-docker run -i -t python examples/GAT.py cora 1433
+docker run -i -t graphiler python examples/GAT.py cora 1433
 ```

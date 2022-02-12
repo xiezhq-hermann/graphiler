@@ -66,7 +66,7 @@ ENV PATH="/opt/conda/bin:$PATH"
 RUN pip install torch==1.8.2+cu111 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html\
     && pip install dgl-cu111==0.6.1\
        torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.8.0+cu111.html\
-    && ogb==1.3.2
+    && pip install ogb==1.3.2
 
 # git clone and build graphiler
 # avoid docker from caching the git repo
