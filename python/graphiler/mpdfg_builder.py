@@ -8,15 +8,14 @@ from graphiler.mpdfg import builder, MPDFGAnnotation
 
 DGL_PATH = str(Path.home()) + "/.dgl/"
 sys.path.append(DGL_PATH)
-# torch.classes.load_library(
-#     DGL_PATH + "libgraphiler.so")
-
+torch.classes.load_library(DGL_PATH + "libgraphiler.so")
+torch.ops.load_library(DGL_PATH + "libgraphiler.so")
 
 FuncTemplate = r'''
 import torch
 from typing import Dict
 from pathlib import Path
-# torch.classes.load_library(str(Path.home()) + "/.dgl/libgraphiler.so")
+torch.classes.load_library(str(Path.home()) + "/.dgl/libgraphiler.so")
 
 def mpdfg_func(dglgraph: torch.classes.my_classes.DGLGraph, 
                 ndata: Dict[str, torch.Tensor], edata: Dict[str, torch.Tensor],
@@ -44,9 +43,9 @@ def mpdfg_builder(msg_func, reduce_func, update_func=None):
     get_params(reduce_func, '_reduce')
     if update_func:
         get_params(update_func, '_update')
-        update_func = torch.jit.script(update_func).graph
-    msg_func = torch.jit.script(msg_func).graph
-    reduce_func = torch.jit.script(reduce_func).graph
+        update_func = torch.jit.script(update_func).inlined_graph
+    msg_func = torch.jit.script(msg_func).inlined_graph
+    reduce_func = torch.jit.script(reduce_func).inlined_graph
     mpdfg_func = FuncTemplate.replace(
         "__extra__", ",".join(str(i) for i in extra_params))
     with open(DGL_PATH + "mpdfg_temp.py", 'w') as f:
@@ -54,8 +53,8 @@ def mpdfg_builder(msg_func, reduce_func, update_func=None):
     from mpdfg_temp import mpdfg_func
     mpdfg_func = torch.jit.script(mpdfg_func)
     mpdfg = MPDFG(mpdfg_func)
+    builder(mpdfg.annotations, msg_func, reduce_func, update_func)
     print(msg_func)
     print(reduce_func)
-    builder(mpdfg.annotations, msg_func, reduce_func, update_func)
     print(mpdfg.forward.graph)
     return mpdfg

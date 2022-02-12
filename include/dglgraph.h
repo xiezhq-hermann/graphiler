@@ -4,7 +4,6 @@
 #include <torch/custom_class.h>
 #include <torch/script.h>
 
-namespace graphiler {
 struct DGLGraph : torch::CustomClassHolder {
   // minimal graph object
   // Todo: integrate with dgl.graph
@@ -19,7 +18,37 @@ struct DGLGraph : torch::CustomClassHolder {
         in_edge_indices(in_edge_indices), out_pointer(out_pointer),
         out_node_indices(out_node_indices), out_edge_indices(out_edge_indices),
         COO_src(COO_src), COO_dst(COO_dst), ntype_pointer(ntype_pointer),
-        etype_pointer(etype_pointer){};
+        etype_pointer(etype_pointer) {
+    num_nodes = in_pointer.size(0) - 1;
+    num_edges = in_node_indices.size(0);
+    num_ntypes =
+        ntype_pointer.has_value() ? ntype_pointer.value().size(0) - 1 : 1;
+    num_etypes =
+        etype_pointer.has_value() ? etype_pointer.value().size(0) - 1 : 1;
+  };
+  inline void SetNtypePointer(torch::Tensor pointer) {
+    ntype_pointer = pointer;
+    num_ntypes =
+        ntype_pointer.has_value() ? ntype_pointer.value().size(0) - 1 : 1;
+  }
+  inline void SetEtypePointer(torch::Tensor pointer) {
+    etype_pointer = pointer;
+    num_etypes =
+        etype_pointer.has_value() ? etype_pointer.value().size(0) - 1 : 1;
+  }
+  // torch::Tensor BroadcastSrcNodeForward(torch::Tensor features);
+  // torch::Tensor BroadcastDstNodeForward(torch::Tensor features);
+  // torch::Tensor SegmentSoftmaxForward(torch::Tensor features, const int64_t dim,
+  //                                     at::optional<at::ScalarType> dtype);
+  // torch::Tensor SpMMCsrForward(torch::Tensor features,
+  //                              std::vector<int64_t> dims, bool keep_dim,
+  //                              at::optional<at::ScalarType> dtype);
+
+  // Todo: int64 support
+  int num_nodes;
+  int num_edges;
+  int num_ntypes;
+  int num_etypes;
 
   // for message reduce, or CSC format
   torch::Tensor in_pointer;
@@ -40,5 +69,4 @@ struct DGLGraph : torch::CustomClassHolder {
   at::optional<torch::Tensor> ntype_pointer;
   at::optional<torch::Tensor> etype_pointer;
 };
-} // namespace graphiler
 #endif // INCLUDE_GRAPHILER_DGL_GRAPH_H_

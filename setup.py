@@ -12,8 +12,7 @@ setup(
     ext_modules=[
         CppExtension('graphiler.mpdfg', [
             'src/pybind.cpp',
-            'src/builder.cpp',
-            'src/dglgraph.cpp'
+            'src/builder.cpp'
         ]),
     ],
     cmdclass={

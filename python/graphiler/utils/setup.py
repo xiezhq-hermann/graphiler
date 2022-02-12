@@ -1,19 +1,23 @@
-import math
 import numpy as np
+from pathlib import Path
 
-import dgl
-from ogb.nodeproppred import DglNodePropPredDataset
-from ogb.linkproppred import DglLinkPropPredDataset
-from dgl.data.rdf import AIFBDataset, MUTAGDataset, BGSDataset, AMDataset
 import torch
 
+from ogb.nodeproppred import DglNodePropPredDataset
+from ogb.linkproppred import DglLinkPropPredDataset
+
+import dgl
+from dgl.data.rdf import AIFBDataset, MUTAGDataset, BGSDataset, AMDataset
+
 DEFAULT_DIM = 64
+DGL_PATH = str(Path.home()) + "/.dgl/"
+torch.classes.load_library(DGL_PATH + "libgraphiler.so")
 
 homo_dataset = {"cora": 1433, "pubmed": 500,
                 "ppi": 50, "arxiv": 128, "reddit": 602}
 
 hetero_dataset = ["debug_hetero", "aifb", "mutag",
-                  "bgs", "biokg", "am", "wikikg", "mag"]
+                  "bgs", "biokg", "am"]
 
 
 def load_data(name, feat_dim=DEFAULT_DIM, prepare=True):
@@ -54,8 +58,8 @@ def load_data(name, feat_dim=DEFAULT_DIM, prepare=True):
     elif name == "mag":
         dataset = DglNodePropPredDataset(name="ogbn-mag")
         g = dataset[0][0]
-    elif name == "wikikg":
-        dataset = DglLinkPropPredDataset(name='ogbl-wikikg')
+    elif name == "wikikg2":
+        dataset = DglLinkPropPredDataset(name='ogbl-wikikg2')
         g = dataset[0]
         src, dst = g.edges()
         reltype = torch.flatten(g.edata['reltype']).cuda()
@@ -87,10 +91,8 @@ def load_data(name, feat_dim=DEFAULT_DIM, prepare=True):
         if name in hetero_dataset:
             type_pointers = prepare_hetero_graph_simplified(g)
             g = prepare_graph(dgl.to_homogeneous(g))
-            g.ntype_pointer = type_pointers['ntype_node_pointer']
-            g.etype_pointer = type_pointers['etype_edge_pointer']
-            g.num_ntypes = max(g.ndata[dgl.NTYPE]).item() + 1
-            g.num_etypes = max(g.edata[dgl.ETYPE]).item() + 1
+            g.DGLGraph.SetNtypePointer(type_pointers['ntype_node_pointer'])
+            g.DGLGraph.SetEtypePointer(type_pointers['etype_edge_pointer'])
         else:
             g = prepare_graph(g)
     return g, node_feats
@@ -99,21 +101,20 @@ def load_data(name, feat_dim=DEFAULT_DIM, prepare=True):
 def prepare_graph(g, ntype=None):
     # Todo: integrate with dgl.graph
     # Todo: long int, multiple devices
-    g.node_id = g.nodes(ntype).type(torch.IntTensor).cuda()
 
-    g.reduce_node_index = (g.in_edges(g.nodes(ntype))[
-                           0]).type(torch.IntTensor).cuda()
-    g.reduce_edge_index = g.in_edges(
+    reduce_node_index = g.in_edges(g.nodes(ntype))[0]
+    reduce_node_index = reduce_node_index.type(torch.IntTensor).cuda()
+    reduce_edge_index = g.in_edges(
         g.nodes(ntype), form='eid').type(torch.IntTensor).cuda()
-    g.message_node_index = (g.out_edges(g.nodes(ntype))[
-                            1]).type(torch.IntTensor).cuda()
-    g.message_edge_index = g.out_edges(
+    message_node_index = (g.out_edges(g.nodes(ntype))[
+        1]).type(torch.IntTensor).cuda()
+    message_edge_index = g.out_edges(
         g.nodes(ntype), form='eid').type(torch.IntTensor).cuda()
-    assert(len(g.reduce_node_index) == len(g.reduce_edge_index) == len(
-        g.message_node_index) == len(g.message_edge_index) == g.num_edges())
+    assert(len(reduce_node_index) == len(reduce_edge_index) == len(
+        message_node_index) == len(message_edge_index) == g.num_edges())
 
     src, dst = g.edges()
-    g.Coosrc, g.Coodst = src.type(
+    Coosrc, Coodst = src.type(
         torch.IntTensor).cuda(), dst.type(torch.IntTensor).cuda()
 
     reduce_node_pointer = [0] + g.in_degrees(g.nodes(ntype)).tolist()
@@ -122,8 +123,11 @@ def prepare_graph(g, ntype=None):
     for i in range(1, len(reduce_node_pointer)):
         reduce_node_pointer[i] += reduce_node_pointer[i - 1]
         message_node_pointer[i] += message_node_pointer[i - 1]
-    g.reduce_node_pointer = torch.IntTensor(reduce_node_pointer).cuda()
-    g.message_node_pointer = torch.IntTensor(message_node_pointer).cuda()
+    reduce_node_pointer = torch.IntTensor(reduce_node_pointer).cuda()
+    message_node_pointer = torch.IntTensor(message_node_pointer).cuda()
+
+    g.DGLGraph = torch.classes.my_classes.DGLGraph(
+        reduce_node_pointer, reduce_node_index, reduce_edge_index, message_node_pointer, message_node_index, message_edge_index, Coosrc, Coodst, None, None)
 
     return g
 
@@ -149,4 +153,7 @@ def setup(device='cuda:0'):
 
 if __name__ == "__main__":
     # a place for testing data loading
-    pass
+    for dataset in homo_dataset:
+        load_data(dataset)
+    for dataset in hetero_dataset:
+        load_data(dataset)
