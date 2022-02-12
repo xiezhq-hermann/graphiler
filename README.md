@@ -23,7 +23,14 @@ python examples/GAT.py cora 1433
 
 The simplest way to reproduce the artifact is to use docker.
 
+## Setup
+
+Install docker and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
+
+## Build and run
+
 ```
 docker build -f docker/Dockerfile -t graphiler .
-docker run -i -t graphiler python examples/GAT.py cora 1433
+docker run --gpus all -i -t graphiler python examples/GAT.py cora 1433
 ```
+
