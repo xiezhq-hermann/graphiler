@@ -63,24 +63,6 @@ BroadcastDstNodeForward(torch::Tensor features,
 }
 
 // Todo: ntype and etype data broadcast
-// torch::Tensor DGLGraph::BroadcastDstNodeForward(torch::Tensor features) {
-//   return BroadcastBase(features, num_nodes, num_edges, in_pointer,
-//                        in_edge_indices);
-// }
-// torch::Tensor BroadcastNodeType(torch::Tensor features, graphiler::DGLGraph
-// graph) {
-//   return BroadcastBase(features, graph.num_ntypes, graph.ntype_pointer,
-//                 graph.node_indices);
-// }
-// torch::Tensor BroadcastEdgeType(torch::Tensor features, graphiler::DGLGraph
-// graph) {
-//   return BroadcastBase(features, graph.num_etypes, graph.etype_pointer,
-//                 graph.edge_indices);
-// }
-
-// torch::Tensor BroadcastSrcNodeType(torch::Tensor features,
-// graphiler::DGLGraph graph); torch::Tensor BroadcastDstNodeType(torch::Tensor
-// features, graphiler::DGLGraph graph);
 
 static auto registry =
     torch::RegisterOperators(

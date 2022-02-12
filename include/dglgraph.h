@@ -36,13 +36,6 @@ struct DGLGraph : torch::CustomClassHolder {
     num_etypes =
         etype_pointer.has_value() ? etype_pointer.value().size(0) - 1 : 1;
   }
-  // torch::Tensor BroadcastSrcNodeForward(torch::Tensor features);
-  // torch::Tensor BroadcastDstNodeForward(torch::Tensor features);
-  // torch::Tensor SegmentSoftmaxForward(torch::Tensor features, const int64_t dim,
-  //                                     at::optional<at::ScalarType> dtype);
-  // torch::Tensor SpMMCsrForward(torch::Tensor features,
-  //                              std::vector<int64_t> dims, bool keep_dim,
-  //                              at::optional<at::ScalarType> dtype);
 
   // Todo: int64 support
   int num_nodes;

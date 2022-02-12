@@ -10,17 +10,18 @@
 namespace graphiler {
 using namespace torch::jit;
 
+// mapping of unique id to Value
 static std::unordered_map<size_t, Value *> VALUE_MAP{};
-static std::unordered_map<size_t, Movement> VALUE_BROADCAST{};
+static std::unordered_map<size_t, Movement> VALUE_TO_BROADCAST{};
 
-static std::unordered_set<size_t> MAIL_VALUE;
-// Todo: keys in other data types
+static std::unordered_set<size_t> VALUE_FOR_MAIL;
+// string seems to be the only valid key
 static std::unordered_map<std::string, Value *> MAIL_BOX;
-// static std::unordered_map<IValue, Value *> MAIL_BOX;
 
+// store the constant value for Values
 static std::unordered_map<size_t, std::vector<IValue>> CONSTANT_MAP{};
 
-// Todo: more reduce and norm type operators
+// Todo: more reduce and norm type operators in a more organized
 const static std::unordered_map<std::string, Movement> MOVEMENT_MAP{
     {"my_ops::SegmentSoftmax", Movement::Norm},
     {"my_ops::SpMM", Movement::Reduce}};
@@ -57,35 +58,36 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
     std::string n_kind = n->kind().toQualString();
 
     // find the root varibles through DGL APIs
+    // Todo: GetAttr or CallMethod?
     if ((n_kind == std::string("prim::GetAttr")) &&
         (n->hasAttributeS("name"))) {
       auto output_id = n->output()->unique();
       std::string attr_name = n->s(attr::name);
       if (attr_name == "_src_data") {
         VALUE_MAP[output_id] = mpdfg_params[1];
-        VALUE_BROADCAST[output_id] = Movement::BroadcastSrc;
+        VALUE_TO_BROADCAST[output_id] = Movement::BroadcastSrc;
         continue;
       } else if (attr_name == "_dst_data") {
         VALUE_MAP[output_id] = mpdfg_params[1];
-        VALUE_BROADCAST[output_id] = Movement::BroadcastDst;
+        VALUE_TO_BROADCAST[output_id] = Movement::BroadcastDst;
         continue;
       } else if (attr_name == "_edge_data") {
         VALUE_MAP[output_id] = mpdfg_params[2];
         continue;
       } else if (attr_name == "_srctype_data") {
         VALUE_MAP[output_id] = mpdfg_params[3];
-        VALUE_BROADCAST[output_id] = Movement::BroadcastSrc;
+        VALUE_TO_BROADCAST[output_id] = Movement::BroadcastSrc;
         continue;
       } else if (attr_name == "_dsttype_data") {
         VALUE_MAP[output_id] = mpdfg_params[3];
-        VALUE_BROADCAST[output_id] = Movement::BroadcastDst;
+        VALUE_TO_BROADCAST[output_id] = Movement::BroadcastDst;
         continue;
       } else if (attr_name == "_edgetype_data") {
         VALUE_MAP[output_id] = mpdfg_params[4];
-        VALUE_BROADCAST[output_id] = Movement::Broadcast;
+        VALUE_TO_BROADCAST[output_id] = Movement::Broadcast;
         continue;
       } else if (attr_name == "_msgs") {
-        MAIL_VALUE.insert(output_id);
+        VALUE_FOR_MAIL.insert(output_id);
         VALUE_MAP[output_id] = mpdfg_params[2];
         continue;
       } else if (attr_name == "_node_data") {
@@ -93,7 +95,7 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
         continue;
       } else if (attr_name == "_nodetype_data") {
         VALUE_MAP[output_id] = mpdfg_params[3];
-        VALUE_BROADCAST[output_id] = Movement::Broadcast;
+        VALUE_TO_BROADCAST[output_id] = Movement::Broadcast;
         continue;
       }
     }
@@ -121,7 +123,7 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
       continue;
     } else if ((stage == Stage::Aggregation) &&
                (n_kind == std::string("aten::__getitem__")) &&
-               (MAIL_VALUE.count(n->inputs()[0]->unique()) != 0)) {
+               (VALUE_FOR_MAIL.count(n->inputs()[0]->unique()) != 0)) {
       // extract data from the mailbox
       assert(MAIL_BOX.find(new_inputs[1]->node()->s(attr::value)) !=
              MAIL_BOX.end());
@@ -173,10 +175,10 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
       mpdfg->data_residency[first_output_id] = new_inputs_residency[0];
       auto v_id = n->inputs()[0]->unique();
       auto v_residency = mpdfg->data_residency[VALUE_MAP[v_id]->unique()];
-      if (VALUE_BROADCAST.find(v_id) != VALUE_BROADCAST.end()) {
+      if (VALUE_TO_BROADCAST.find(v_id) != VALUE_TO_BROADCAST.end()) {
         // insert broadcast operator for data fetching
         NodeKind new_kind;
-        switch (VALUE_BROADCAST[v_id]) {
+        switch (VALUE_TO_BROADCAST[v_id]) {
         case Movement::BroadcastSrc:
           new_kind =
               (v_residency == Residency::Node)
@@ -204,7 +206,7 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
         VALUE_MAP[n->output()->unique()] = broadcast_node->output();
         mpdfg->data_residency[broadcast_node->output()->unique()] =
             (stage == Stage::Creation) ? Residency::Edge : Residency::Node;
-        mpdfg->data_movement[broadcast_node] = VALUE_BROADCAST[v_id];
+        mpdfg->data_movement[broadcast_node] = VALUE_TO_BROADCAST[v_id];
       }
     } else if ((n_kind == std::string("aten::mm")) ||
                (n_kind == std::string("prim::ListConstruct")) ||
@@ -258,7 +260,7 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
       CONSTANT_MAP[first_output_id] = optional_outputs.value();
     }
 
-    // replace the final node to reture
+    // replace the final node to return
     if ((stage == Stage::Aggregation) && (n == in_final_node)) {
       // Todo: update stage
       mpdfg_final_node->replaceAllUsesWith(new_node);
@@ -316,8 +318,9 @@ void DFG_concat(std::shared_ptr<MPDFGAnnotation> &mpdfg,
   // message creation stage
   parse_stage(mpdfg, mpdfg_params, msg_block, Stage::Creation);
   VALUE_MAP.clear();
-  VALUE_BROADCAST.clear();
+  VALUE_TO_BROADCAST.clear();
   // message aggregation stage
   parse_stage(mpdfg, mpdfg_params, reduce_block, Stage::Aggregation);
+  // Todo: post building optimization, e.g., dead code elimination
 }
 } // namespace graphiler

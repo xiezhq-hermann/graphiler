@@ -98,11 +98,11 @@ def profile(dataset, feat_dim):
     net_dgl.eval()
     with torch.no_grad():
         bench(net=net_dgl, net_params=(g, features),
-              tag="gatconv", nvprof=False)
+              tag="gatconv", nvprof=False, memory=True)
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="compile", nvprof=False)
+            g, features, True), tag="compile", nvprof=False, memory=True)
         res = bench(net=net, net_params=(g, features, False),
-                    tag="naive", nvprof=False)
+                    tag="naive", nvprof=False, memory=True)
         check_equal(compile_res, res)
 
 

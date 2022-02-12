@@ -10,7 +10,7 @@ def check_equal(first, second):
     print("corectness check passed!")
 
 
-def bench(net, net_params, tag="", nvprof=False, memory=False, steps=101):
+def bench(net, net_params, tag="", nvprof=False, memory=False, steps=1001):
     # warm up
     for i in range(5):
         net(*net_params)
@@ -24,8 +24,8 @@ def bench(net, net_params, tag="", nvprof=False, memory=False, steps=101):
     synchronize()
     if nvprof:
         profiler.stop()
-    print("{} elapsed time: {} s/infer".format(tag,
-          (time.time() - start_time) / steps))
+    print("{} elapsed time: {} ms/infer".format(tag,
+          (time.time() - start_time) / steps * 1000))
     if memory:
         print("max memory consumption: {} MB".format(
             max_memory_allocated()/1048576))

@@ -6,6 +6,7 @@ import torch
 from graphiler import EdgeBatchDummy, NodeBatchDummy
 from graphiler.mpdfg import builder, MPDFGAnnotation
 
+# load DGLGraph and my_ops
 DGL_PATH = str(Path.home()) + "/.dgl/"
 sys.path.append(DGL_PATH)
 torch.classes.load_library(DGL_PATH + "libgraphiler.so")
@@ -39,22 +40,32 @@ def mpdfg_builder(msg_func, reduce_func, update_func=None):
                 continue
             extra_params.append(param.replace(name=param.name+stage))
         return
+
     get_params(msg_func, '_msg')
     get_params(reduce_func, '_reduce')
     if update_func:
         get_params(update_func, '_update')
-        update_func = torch.jit.script(update_func).inlined_graph
-    msg_func = torch.jit.script(msg_func).inlined_graph
-    reduce_func = torch.jit.script(reduce_func).inlined_graph
+
     mpdfg_func = FuncTemplate.replace(
         "__extra__", ",".join(str(i) for i in extra_params))
     with open(DGL_PATH + "mpdfg_temp.py", 'w') as f:
         f.write(mpdfg_func)
+
+    # import source code template for scripting
     from mpdfg_temp import mpdfg_func
     mpdfg_func = torch.jit.script(mpdfg_func)
     mpdfg = MPDFG(mpdfg_func)
+
+    # Todo: inline or not inline?
+    msg_func = torch.jit.script(msg_func).inlined_graph
+    reduce_func = torch.jit.script(reduce_func).inlined_graph
+    update_func = torch.jit.script(
+        update_func).inlined_graph if update_func else None
     builder(mpdfg.annotations, msg_func, reduce_func, update_func)
+
     print(msg_func)
     print(reduce_func)
+    print(update_func)
     print(mpdfg.forward.graph)
+
     return mpdfg
