@@ -4,10 +4,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from dgl.nn.pytorch.conv import GATConv
+from torch_sparse import SparseTensor
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
 from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM
+
+from GAT_DGL import GAT_DGL
+from GAT_PyG import GAT_PyG
+
+
 device = setup()
 
 
@@ -66,37 +71,31 @@ class GAT(nn.Module):
         return h
 
 
-class GAT_DGL(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim):
-        super(GAT_DGL, self).__init__()
-        self.layer1 = GATConv(in_dim, hidden_dim,
-                              num_heads=1, allow_zero_in_degree=True)
-        self.layer2 = GATConv(hidden_dim, out_dim,
-                              num_heads=1, allow_zero_in_degree=True)
-
-    def forward(self, g, features):
-        h = self.layer1(g, features)
-        h = F.elu(h)
-        h = self.layer2(g, h)
-        return h
-
-
 def profile(dataset, feat_dim):
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
+    # graph format for PyG
+    u, v = g.edges()
+    adj = SparseTensor(row=u, col=v, sparse_sizes=(
+        g.num_src_nodes(), g.num_dst_nodes())).to(device)
     g, features = g.to(device), features.to(device)
 
-    net = GAT(in_dim=features.size()[
-              1], hidden_dim=DEFAULT_DIM, out_dim=DEFAULT_DIM).to(device)
-    net_dgl = GAT_DGL(in_dim=features.size()[
-                      1], hidden_dim=DEFAULT_DIM, out_dim=DEFAULT_DIM).to(device)
+    net = GAT(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+              out_dim=DEFAULT_DIM).to(device)
+    net_dgl = GAT_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                      out_dim=DEFAULT_DIM).to(device)
+    net_pyg = GAT_PyG(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                      out_dim=DEFAULT_DIM).to(device)
 
     net.eval()
     net_dgl.eval()
+    net_pyg.eval()
     with torch.no_grad():
         steps = 1000
         bench(net=net_dgl, net_params=(g, features),
-              tag="gatconv", nvprof=False, steps=steps, memory=True)
+              tag="DGL primitives", nvprof=False, steps=steps, memory=True)
+        bench(net=net_pyg, net_params=(features, adj),
+              tag="PyG primitives", nvprof=False, steps=steps, memory=True)
         compile_res = bench(net=net, net_params=(
             g, features, True), tag="compile", nvprof=False, steps=steps, memory=True)
         res = bench(net=net, net_params=(g, features, False),
