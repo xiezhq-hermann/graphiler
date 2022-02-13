@@ -1,5 +1,6 @@
-#include "builder.h"
 #include <torch/extension.h>
+
+#include "builder/builder.h"
 
 namespace graphiler {
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {

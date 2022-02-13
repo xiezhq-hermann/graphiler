@@ -1,10 +1,3 @@
-#include <algorithm>
-#include <iostream>
-#include <unordered_set>
-
-#include <torch/csrc/jit/ir/constants.h>
-#include <torch/csrc/jit/passes/constant_propagation.h>
-
 #include "builder.h"
 
 static bool UPDATE_UDF = false;
@@ -373,6 +366,9 @@ void DFG_concat(std::shared_ptr<MPDFGAnnotation> &mpdfg,
   if (UPDATE_UDF)
     parse_stage(mpdfg, mpdfg_params, update_block, Stage::Update);
 
-  // Todo: post building optimization, e.g., dead code elimination
+  // post building optimization, redundant code elimination
+  EliminateDeadCode(mpdfg->DFG);
+  EliminateCommonSubexpression(mpdfg->DFG);
+  ConstantPooling(mpdfg->DFG);
 }
 } // namespace graphiler
