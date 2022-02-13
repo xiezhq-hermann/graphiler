@@ -4,10 +4,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from dgl.nn.pytorch.conv import GraphConv
+from torch_sparse import SparseTensor
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
 from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM
+
+from GCN_DGL import GCN_DGL
+from GCN_PyG import GCN_PyG
+
 device = setup()
 
 
@@ -51,36 +55,31 @@ class GCN(nn.Module):
         return x
 
 
-class GCN_DGL(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim):
-        super(GCN_DGL, self).__init__()
-        self.layer1 = GraphConv(in_dim, hidden_dim, norm='right',
-                                allow_zero_in_degree=True, activation=torch.relu)
-        self.layer2 = GraphConv(hidden_dim, out_dim, norm='right',
-                                allow_zero_in_degree=True, activation=torch.relu)
-
-    def forward(self, g, features):
-        x = F.relu(self.layer1(g, features))
-        x = self.layer2(g, x)
-        return x
-
-
 def profile(dataset, feat_dim):
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
+    # graph format for PyG
+    u, v = g.edges()
+    adj = SparseTensor(row=u, col=v, sparse_sizes=(
+        g.num_src_nodes(), g.num_dst_nodes())).to(device)
     g, features = g.to(device), features.to(device)
 
-    net = GCN(in_dim=features.size()[
-              1], hidden_dim=DEFAULT_DIM, out_dim=DEFAULT_DIM).to(device)
-    net_dgl = GCN_DGL(in_dim=features.size()[
-                      1], hidden_dim=DEFAULT_DIM, out_dim=DEFAULT_DIM).to(device)
+    net = GCN(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+              out_dim=DEFAULT_DIM).to(device)
+    net_dgl = GCN_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                      out_dim=DEFAULT_DIM).to(device)
+    net_pyg = GCN_PyG(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                      out_dim=DEFAULT_DIM).to(device)
 
     net.eval()
     net_dgl.eval()
+    net_pyg.eval()
     with torch.no_grad():
         steps = 1000
         bench(net=net_dgl, net_params=(g, features),
-              tag="graphconv", nvprof=False, steps=steps, memory=True)
+              tag="DGL primitives", nvprof=False, steps=steps, memory=True)
+        bench(net=net_pyg, net_params=(features, adj),
+              tag="PyG primitives", nvprof=False, steps=steps, memory=True)
         compile_res = bench(net=net, net_params=(
             g, features, True), tag="compile", nvprof=False, steps=steps, memory=True)
         res = bench(net=net, net_params=(g, features, False),
