@@ -66,6 +66,7 @@ class GCN_DGL(nn.Module):
 
 
 def profile(dataset, feat_dim):
+    print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
     g, features = g.to(device), features.to(device)
 
@@ -77,12 +78,13 @@ def profile(dataset, feat_dim):
     net.eval()
     net_dgl.eval()
     with torch.no_grad():
+        steps = 1000
         bench(net=net_dgl, net_params=(g, features),
-              tag="graphconv", nvprof=False, memory=True)
+              tag="graphconv", nvprof=False, steps=steps, memory=True)
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="compile", nvprof=False, memory=True)
+            g, features, True), tag="compile", nvprof=False, steps=steps, memory=True)
         res = bench(net=net, net_params=(g, features, False),
-                    tag="naive", nvprof=False, memory=True)
+                    tag="naive", nvprof=False, steps=steps, memory=True)
         check_equal(compile_res, res)
 
 

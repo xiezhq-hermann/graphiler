@@ -8,7 +8,7 @@ import dgl.function as fn
 from dgl.nn.functional import edge_softmax
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM
+from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM
 
 device = setup()
 
@@ -284,6 +284,7 @@ class NetHetero(nn.Module):
 
 
 def profile(dataset, feat_dim):
+    print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
     g, features = g.to(device), features.to(device)
 
@@ -304,11 +305,11 @@ def profile(dataset, feat_dim):
     net.eval()
     net_hetero.eval()
     with torch.no_grad():
-        steps = 11
+        steps = 1000
         bench(net=net_hetero, net_params=(g_hetero, g_hetero.ndata['h']),
               tag="HGT_slice on {}".format(dataset), nvprof=False, steps=steps, memory=True)
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="compile on {}".format(dataset), nvprof=True, steps=steps, memory=True)
+            g, features, True), tag="compile on {}".format(dataset), nvprof=False, steps=steps, memory=True)
         res = bench(net=net, net_params=(g, features, False),
                     tag="naive", nvprof=False, steps=steps, memory=True)
         check_equal(compile_res, res)
