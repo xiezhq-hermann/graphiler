@@ -11,6 +11,7 @@ from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, 
 device = setup()
 
 
+# pass extra parameters as a workaround
 def message_func(edges: EdgeBatchDummy, fc_weight, attn_weight):
     z_s = torch.mm(edges.src['h'], fc_weight)
     z_d = torch.mm(edges.dst['h'], fc_weight)
@@ -42,18 +43,13 @@ class GATLayer(nn.Module):
         a = torch.mm(z2, self.attn_weight)
         return {'z': z_s, 'e': torch.relu(a)}
 
-    def reduce_func(self, nodes):
-        alpha = torch.softmax(nodes.mailbox['e'], dim=1)
-        h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
-        return {'h': h}
-
     def forward(self, g, feature, compile=False):
         g.ndata['h'] = feature
         if compile:
             update_all(g, mpdfg, msg_params=(
                 self.fc_weight, self.attn_weight))
         else:
-            g.update_all(self.message_func, self.reduce_func)
+            g.update_all(self.message_func, reduce_func)
         return g.ndata.pop('h')
 
 

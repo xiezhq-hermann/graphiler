@@ -1,12 +1,18 @@
 #include "../ops.cuh"
 
-inline torch::Tensor BroadcastBase(torch::Tensor features, int num_nodes,
-                                   int num_edges, torch::Tensor pointer,
-                                   torch::Tensor indices) {
+// Todo: COO version
+inline torch::Tensor BroadcastBaseForward(torch::Tensor features, int num_nodes,
+                                          int num_edges, torch::Tensor pointer,
+                                          torch::Tensor indices) {
   CHECK_INPUT(features);
 
+  int feat_dim = 1;
   int dims = features.dim();
-  int feat_dim = dims == 1 ? 1 : features.size(1);
+  std::vector<int64_t> res_size = {num_edges};
+  for (int i = 1; i < dims; i++) {
+    feat_dim *= features.size(i);
+    res_size.push_back(features.size(i));
+  }
 
   // configure block sizes based on
   // column-wise and instruction-level parallelism
@@ -21,15 +27,8 @@ inline torch::Tensor BroadcastBase(torch::Tensor features, int num_nodes,
   dim3 threads(num_threads, row_per_block, 1);
 
   torch::Tensor result;
-  if (dims == 2) {
-    result = torch::zeros({num_edges, feat_dim},
-                          torch::dtype(features.dtype()).device(torch::kCUDA));
-  } else if (dims == 1) {
-    result = torch::zeros({num_edges},
-                          torch::dtype(features.dtype()).device(torch::kCUDA));
-  } else {
-    assert(false && "feature size not supported");
-  }
+  result = torch::zeros(res_size,
+                        torch::dtype(features.dtype()).device(torch::kCUDA));
 
   // feature data can be various types
   if (features.dtype() == torch::kFloat32) {
@@ -49,26 +48,62 @@ inline torch::Tensor BroadcastBase(torch::Tensor features, int num_nodes,
   return result;
 }
 
-torch::Tensor
-BroadcastSrcNodeForward(torch::Tensor features,
-                        const c10::intrusive_ptr<DGLGraph> &graph) {
-  return BroadcastBase(features, graph->num_nodes, graph->num_edges,
-                       graph->out_pointer, graph->out_edge_indices);
+torch::Tensor BroadcastSrcNode(torch::Tensor features,
+                               const c10::intrusive_ptr<DGLGraph> &graph) {
+  return BroadcastBaseForward(features, graph->num_nodes, graph->num_edges,
+                              graph->out_pointer, graph->out_edge_indices);
 }
-torch::Tensor
-BroadcastDstNodeForward(torch::Tensor features,
-                        const c10::intrusive_ptr<DGLGraph> &graph) {
-  return BroadcastBase(features, graph->num_nodes, graph->num_edges,
-                       graph->in_pointer, graph->in_edge_indices);
+torch::Tensor BroadcastDstNode(torch::Tensor features,
+                               const c10::intrusive_ptr<DGLGraph> &graph) {
+  return BroadcastBaseForward(features, graph->num_nodes, graph->num_edges,
+                              graph->in_pointer, graph->in_edge_indices);
 }
 
-// Todo: ntype and etype data broadcast
+torch::Tensor BroadcastNodeType(torch::Tensor features,
+                                const c10::intrusive_ptr<DGLGraph> &graph) {
+  assert(graph->ntype_pointer.has_value());
+  torch::Tensor node_indices = torch::arange(
+      0, graph->num_nodes, torch::dtype(torch::kInt32).device(torch::kCUDA));
+  return BroadcastBaseForward(features, graph->num_ntypes, graph->num_nodes,
+                              graph->ntype_pointer.value(), node_indices);
+}
+
+torch::Tensor BroadcastSrcNodeType(torch::Tensor features,
+                                   const c10::intrusive_ptr<DGLGraph> &graph) {
+  return BroadcastSrcNode(BroadcastNodeType(features, graph), graph);
+}
+
+torch::Tensor BroadcastDstNodeType(torch::Tensor features,
+                                   const c10::intrusive_ptr<DGLGraph> &graph) {
+  return BroadcastDstNode(BroadcastNodeType(features, graph), graph);
+}
+
+torch::Tensor BroadcastEdgeType(torch::Tensor features,
+                                const c10::intrusive_ptr<DGLGraph> &graph) {
+  assert(graph->etype_pointer.has_value());
+  torch::Tensor edge_indices = torch::arange(
+      0, graph->num_edges, torch::dtype(torch::kInt32).device(torch::kCUDA));
+  return BroadcastBaseForward(features, graph->num_etypes, graph->num_edges,
+                              graph->etype_pointer.value(), edge_indices);
+}
 
 static auto registry =
     torch::RegisterOperators(
         "my_ops::BroadcastSrcNode(Tensor x, "
         "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
-        &BroadcastSrcNodeForward)
+        &BroadcastSrcNode)
         .op("my_ops::BroadcastDstNode(Tensor x, "
             "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
-            &BroadcastDstNodeForward);
+            &BroadcastDstNode)
+        .op("my_ops::BroadcastNodeType(Tensor x, "
+            "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
+            &BroadcastNodeType)
+        .op("my_ops::BroadcastSrcNodeType(Tensor x, "
+            "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
+            &BroadcastSrcNodeType)
+        .op("my_ops::BroadcastDstNodeType(Tensor x, "
+            "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
+            &BroadcastDstNodeType)
+        .op("my_ops::BroadcastEdgeType(Tensor x, "
+            "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
+            &BroadcastEdgeType);

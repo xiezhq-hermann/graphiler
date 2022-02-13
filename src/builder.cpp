@@ -7,6 +7,8 @@
 
 #include "builder.h"
 
+static bool UPDATE_UDF = false;
+
 namespace graphiler {
 using namespace torch::jit;
 
@@ -273,9 +275,21 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
       CONSTANT_MAP[first_output_id] = optional_outputs.value();
     }
 
-    // replace the final node to return
-    if ((stage == Stage::Aggregation) && (n == in_final_node)) {
-      // Todo: update stage
+    if (UPDATE_UDF && (stage == Stage::Aggregation) && (n == in_final_node)) {
+      // update node data at the end of message aggregation stage
+      assert(new_inputs.size() % 2 == 0);
+      assert(n_kind == std::string("prim::DictConstruct"));
+      auto set_kind = NodeKind::fromQualString("aten::_set_item");
+      for (size_t o = 0; o < new_inputs.size(); o += 2) {
+        std::vector<Value *> set_inputs = {mpdfg_params[1], new_inputs[o],
+                                           new_inputs[o + 1]};
+        auto set_node = mpdfg->DFG->create(set_kind, set_inputs, 0);
+        set_node->insertAfter(new_node);
+      }
+    } else if ((n == in_final_node) &&
+               ((stage == Stage::Update) ||
+                ((!UPDATE_UDF) && (stage == Stage::Aggregation)))) {
+      // replace the final node to return
       mpdfg_final_node->replaceAllUsesWith(new_node);
       mpdfg_final_node->removeAllInputs();
       mpdfg_final_node->destroy();
@@ -296,6 +310,7 @@ void DFG_concat(std::shared_ptr<MPDFGAnnotation> &mpdfg,
   auto mpdfg_block = mpdfg->DFG->block();
   auto msg_block = msg_graph->block();
   auto reduce_block = reduce_graph->block();
+  Block *update_block;
 
   auto mpdfg_params = mpdfg_block->param_node()->outputs();
   auto msg_params = msg_block->param_node()->outputs();
@@ -310,23 +325,44 @@ void DFG_concat(std::shared_ptr<MPDFGAnnotation> &mpdfg,
   mpdfg->data_residency[mpdfg_params[4]->unique()] = Residency::EdgeType;
 
   // map the parameters in the message function to MP-DFG
-  size_t param_pointer = 1;
-  while (num_msg_params > param_pointer) {
-    VALUE_MAP[msg_params[param_pointer]->unique()] =
-        mpdfg_params[param_pointer + 4];
-    mpdfg->data_residency[mpdfg_params[param_pointer + 4]->unique()] =
+  // Todo: dedup
+  size_t param_offset = 1;
+  size_t param_pointer = 4;
+  while (num_msg_params > param_offset) {
+    VALUE_MAP[msg_params[param_offset]->unique()] =
+        mpdfg_params[param_offset + param_pointer];
+    mpdfg
+        ->data_residency[mpdfg_params[param_offset + param_pointer]->unique()] =
         Residency::Shared;
-    param_pointer += 1;
+    param_offset += 1;
   }
-  param_pointer = 1;
-  while (num_reduce_params > param_pointer) {
-    VALUE_MAP[reduce_params[param_pointer]->unique()] =
-        mpdfg_params[param_pointer + num_msg_params + 3];
-    mpdfg->data_residency[mpdfg_params[param_pointer + num_msg_params + 3]
-                              ->unique()] = Residency::Shared;
-    param_pointer += 1;
+  param_offset = 1;
+  param_pointer = num_msg_params + 3;
+  while (num_reduce_params > param_offset) {
+    VALUE_MAP[reduce_params[param_offset]->unique()] =
+        mpdfg_params[param_offset + param_pointer];
+    mpdfg
+        ->data_residency[mpdfg_params[param_offset + param_pointer]->unique()] =
+        Residency::Shared;
+    param_offset += 1;
   }
-  // Todo: update function
+
+  if (update_graph.has_value()) {
+    UPDATE_UDF = true;
+    update_block = update_graph.value()->block();
+    auto update_params = update_block->param_node()->outputs();
+    size_t num_update_params = update_params.size();
+
+    param_offset = 1;
+    param_pointer = num_msg_params + num_reduce_params + 2;
+    while (num_update_params > param_offset) {
+      VALUE_MAP[update_params[param_offset]->unique()] =
+          mpdfg_params[param_offset + param_pointer];
+      mpdfg->data_residency[mpdfg_params[param_offset + param_pointer]
+                                ->unique()] = Residency::Shared;
+      param_pointer += 1;
+    }
+  }
 
   // message creation stage
   parse_stage(mpdfg, mpdfg_params, msg_block, Stage::Creation);
@@ -334,6 +370,9 @@ void DFG_concat(std::shared_ptr<MPDFGAnnotation> &mpdfg,
   VALUE_TO_BROADCAST.clear();
   // message aggregation stage
   parse_stage(mpdfg, mpdfg_params, reduce_block, Stage::Aggregation);
+  if (UPDATE_UDF)
+    parse_stage(mpdfg, mpdfg_params, update_block, Stage::Update);
+
   // Todo: post building optimization, e.g., dead code elimination
 }
 } // namespace graphiler
