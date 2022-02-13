@@ -290,7 +290,7 @@ void parse_stage(std::shared_ptr<MPDFGAnnotation> &mpdfg,
   }
 }
 
-void DFG_concat(std::shared_ptr<MPDFGAnnotation> &mpdfg,
+void MPDFGBuilder(std::shared_ptr<MPDFGAnnotation> &mpdfg,
                 std::shared_ptr<Graph> &msg_graph,
                 std::shared_ptr<Graph> &reduce_graph,
                 at::optional<std::shared_ptr<Graph>> update_graph) {
@@ -367,8 +367,6 @@ void DFG_concat(std::shared_ptr<MPDFGAnnotation> &mpdfg,
     parse_stage(mpdfg, mpdfg_params, update_block, Stage::Update);
 
   // post building optimization, redundant code elimination
-  EliminateDeadCode(mpdfg->DFG);
-  EliminateCommonSubexpression(mpdfg->DFG);
-  ConstantPooling(mpdfg->DFG);
+  dedup(mpdfg->DFG);
 }
 } // namespace graphiler

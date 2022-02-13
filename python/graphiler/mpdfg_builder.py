@@ -3,7 +3,7 @@ import inspect
 from pathlib import Path
 
 import torch
-from graphiler import EdgeBatchDummy, NodeBatchDummy
+from graphiler import EdgeBatchDummy, NodeBatchDummy, optimizer
 from graphiler.mpdfg import builder, MPDFGAnnotation
 
 # load DGLGraph and my_ops
@@ -31,7 +31,7 @@ class MPDFG():
         self.annotations = MPDFGAnnotation(func.graph)
 
 
-def mpdfg_builder(msg_func, reduce_func, update_func=None):
+def mpdfg_builder(msg_func, reduce_func, update_func=None, opt_level=2):
     extra_params = []
 
     def get_params(func, stage):
@@ -66,6 +66,8 @@ def mpdfg_builder(msg_func, reduce_func, update_func=None):
     print(msg_func)
     print(reduce_func)
     print(update_func)
+
+    optimizer(mpdfg.annotations, opt_level)
     print(mpdfg.forward.graph)
 
     return mpdfg

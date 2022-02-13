@@ -1,8 +1,9 @@
-#include <algorithm>
-#include <iostream>
 #include <unordered_set>
 
+#include "torch/csrc/jit/ir/subgraph_matcher.h"
+#include "torch/csrc/jit/passes/subgraph_rewrite.h"
 #include <torch/csrc/jit/ir/constants.h>
+#include <torch/csrc/jit/ir/node_hashing.h>
 #include <torch/csrc/jit/passes/common_subexpression_elimination.h>
 #include <torch/csrc/jit/passes/constant_pooling.h>
 #include <torch/csrc/jit/passes/constant_propagation.h>
@@ -10,12 +11,8 @@
 #include <torch/csrc/jit/passes/inliner.h>
 
 #include "../../include/mpdfg.h"
-#include "../optimizer/optimizer.h"
 
 namespace graphiler {
-using torch::jit::Graph;
-void MPDFGBuilder(std::shared_ptr<MPDFGAnnotation> &mpdfg,
-                std::shared_ptr<Graph> &msg_graph,
-                std::shared_ptr<Graph> &reduce_graph,
-                at::optional<std::shared_ptr<Graph>> update_graph);
+void dedup(std::shared_ptr<torch::jit::Graph> &graph);
+void split(std::shared_ptr<MPDFGAnnotation> &mpdfg);
 } // namespace graphiler

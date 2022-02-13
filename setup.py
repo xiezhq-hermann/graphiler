@@ -12,7 +12,9 @@ setup(
     ext_modules=[
         CppExtension('graphiler.mpdfg', [
             'src/pybind.cpp',
-            'src/builder/builder.cpp'
+            'src/builder/builder.cpp',
+            'src/optimizer/dedup.cpp',
+            'src/optimizer/split.cpp'
         ]),
     ],
     cmdclass={
