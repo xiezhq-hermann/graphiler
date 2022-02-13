@@ -4,11 +4,14 @@ import math
 import torch
 import torch.nn as nn
 
+from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
+from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM
+
 import dgl.function as fn
 from dgl.nn.functional import edge_softmax
 
-from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM
+from HGT_DGL import HGT_DGLHetero
+from HGT_PyG import HGT_PyG, get_ntype
 
 device = setup()
 
@@ -106,9 +109,6 @@ class HGTLayer_simplified(nn.Module):
             relation_pri / self.sqrt_dk
         return {'attn': attn_score, 'v': v}
 
-    # def msg_func_softmax(self, edges):
-    #     self.message_func(edges)
-
     def update_func(self, nodes):
         # (N, 1)
         skip = self.skip[nodes.data['_TYPE']]
@@ -120,7 +120,7 @@ class HGTLayer_simplified(nn.Module):
         trans_out = torch.bmm(nodes.data['t'].unsqueeze(1), a_weight).squeeze()
         return {'h': trans_out * alpha.unsqueeze(1)}
 
-    def forward(self, g, h, compile=False):
+    def forward(self, g, h, flag=False):
         g.ndata['h'] = h
         g.ntype_data['k_weight'] = self.k_weight
         g.ntype_data['v_weight'] = self.v_weight
@@ -131,14 +131,18 @@ class HGTLayer_simplified(nn.Module):
         g.ntype_data['skip'] = self.skip
         g.ntype_data['a_weight'] = self.a_weight
 
-        if compile:
+        if flag == "compile":
             update_all(g, mpdfg, msg_params=(self.sqrt_dk,))
-        else:
-            g.update_all(self.message_func, reduce_func, self.update_func)
+        elif flag == "batch":
             # use dgl built-in functions as dgl-batch baseline
-            # g.apply_edges(self.message_func)
-            # g.edata['m'] = edge_softmax(g, g.edata['attn']) * g.edata['v']
-            # g.update_all(fn.copy_e('m', 'm'), fn.sum('m', 't'), self.update_func)
+            g.apply_edges(self.message_func)
+            g.edata['m'] = edge_softmax(g, g.edata['attn']) * g.edata['v']
+            g.update_all(fn.copy_e('m', 'm'), fn.sum(
+                'm', 't'), self.update_func)
+        elif flag == "naive":
+            g.update_all(self.message_func, reduce_func, self.update_func)
+        else:
+            assert(False & "unsupported flagF")
 
 
 class HGT(nn.Module):
@@ -155,132 +159,10 @@ class HGT(nn.Module):
         self.layer1 = HGTLayer_simplified(
             self.h_dim, self.out_dim, self.num_ntypes, self.num_rels)
 
-    def forward(self, g, h, compile=False):
-        self.layer0(g, h, compile=compile)
-        self.layer1(g, g.ndata['h'], compile=compile)
+    def forward(self, g, h, flag="naive"):
+        self.layer0(g, h, flag=flag)
+        self.layer1(g, g.ndata['h'], flag=flag)
         return g.ndata.pop('h')
-
-
-class HGTLayerHetero(nn.Module):
-    def __init__(self,
-                 in_dim,
-                 out_dim,
-                 node_dict,
-                 edge_dict,
-                 n_heads=1,
-                 dropout=0.2,
-                 use_norm=False):
-        super(HGTLayerHetero, self).__init__()
-
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-        self.node_dict = node_dict
-        self.edge_dict = edge_dict
-        self.num_types = len(node_dict)
-        self.num_relations = len(edge_dict)
-        self.total_rel = self.num_types * self.num_relations * self.num_types
-        self.n_heads = n_heads
-        self.d_k = out_dim // n_heads
-        self.sqrt_dk = math.sqrt(self.d_k)
-        self.att = None
-
-        self.k_linears = nn.ModuleList()
-        self.q_linears = nn.ModuleList()
-        self.v_linears = nn.ModuleList()
-        self.a_linears = nn.ModuleList()
-        self.norms = nn.ModuleList()
-        self.use_norm = use_norm
-
-        for t in range(self.num_types):
-            self.k_linears.append(nn.Linear(in_dim,   out_dim))
-            self.q_linears.append(nn.Linear(in_dim,   out_dim))
-            self.v_linears.append(nn.Linear(in_dim,   out_dim))
-            self.a_linears.append(nn.Linear(out_dim,  out_dim))
-            if use_norm:
-                self.norms.append(nn.LayerNorm(out_dim))
-
-        self.relation_pri = nn.Parameter(
-            torch.ones(self.num_relations, self.n_heads))
-        self.relation_att = nn.Parameter(torch.Tensor(
-            self.num_relations, n_heads, self.d_k, self.d_k))
-        self.relation_msg = nn.Parameter(torch.Tensor(
-            self.num_relations, n_heads, self.d_k, self.d_k))
-        self.skip = nn.Parameter(torch.ones(self.num_types))
-        self.drop = nn.Dropout(dropout)
-
-        nn.init.xavier_uniform_(self.relation_att)
-        nn.init.xavier_uniform_(self.relation_msg)
-
-    def forward(self, G, h):
-        with G.local_scope():
-            node_dict, edge_dict = self.node_dict, self.edge_dict
-            for srctype, etype, dsttype in G.canonical_etypes:
-                sub_graph = G[srctype, etype, dsttype]
-
-                k_linear = self.k_linears[node_dict[srctype]]
-                v_linear = self.v_linears[node_dict[srctype]]
-                q_linear = self.q_linears[node_dict[dsttype]]
-
-                k = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
-                v = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
-                q = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
-
-                e_id = self.edge_dict[(srctype, etype, dsttype)]
-
-                relation_att = self.relation_att[e_id]
-                relation_pri = self.relation_pri[e_id]
-                relation_msg = self.relation_msg[e_id]
-
-                k = torch.einsum("bij,ijk->bik", k, relation_att)
-                v = torch.einsum("bij,ijk->bik", v, relation_msg)
-
-                sub_graph.srcdata['k'] = k
-                sub_graph.dstdata['q'] = q
-                sub_graph.srcdata['v_%d' % e_id] = v
-
-                sub_graph.apply_edges(fn.v_dot_u('q', 'k', 't'))
-                attn_score = sub_graph.edata.pop(
-                    't').sum(-1) * relation_pri / self.sqrt_dk
-                attn_score = edge_softmax(sub_graph, attn_score, norm_by='dst')
-
-                sub_graph.edata['t'] = attn_score.unsqueeze(-1)
-
-            G.multi_update_all({etype: (fn.u_mul_e('v_%d' % e_id, 't', 'm'), fn.sum('m', 't'))
-                                for etype, e_id in edge_dict.items()}, cross_reducer='mean')
-
-            new_h = {}
-            for ntype in G.ntypes:
-                '''
-                    Step 3: Target-specific Aggregation
-                    x = norm( W[node_type] * gelu( Agg(x) ) + x )
-                '''
-                n_id = node_dict[ntype]
-                alpha = torch.sigmoid(self.skip[n_id])
-                t = G.nodes[ntype].data['t'].view(-1, self.out_dim)
-                trans_out = self.drop(self.a_linears[n_id](t))
-                trans_out = trans_out * alpha  # + h[ntype] * (1-alpha) ?
-                if self.use_norm:
-                    new_h[ntype] = self.norms[n_id](trans_out)
-                else:
-                    new_h[ntype] = trans_out
-            return new_h
-
-
-class NetHetero(nn.Module):
-    def __init__(self, node_dict, edge_dict, in_dim, h_dim, out_dim):
-        super(NetHetero, self).__init__()
-        self.node_dict = node_dict
-        self.edge_dict = edge_dict
-        self.gcs = nn.ModuleList()
-        self.in_dim = in_dim
-        self.h_dim = h_dim
-        self.out_dim = out_dim
-        self.layer0 = HGTLayerHetero(in_dim, h_dim, node_dict, edge_dict)
-        self.layer1 = HGTLayerHetero(h_dim, out_dim, node_dict, edge_dict)
-
-    def forward(self, G, h):
-        h = self.layer0(G, h)
-        h = self.layer1(G, h)
 
 
 def profile(dataset, feat_dim):
@@ -288,6 +170,13 @@ def profile(dataset, feat_dim):
     g, features = load_data(dataset, feat_dim)
     g, features = g.to(device), features.to(device)
 
+    # graph format for PyG
+    u, v = g.edges()
+    adj = torch.stack([u, v]).to(device)
+    src_type, dst_type = get_ntype(
+        adj, g.edata['_TYPE'], g.ndata['_TYPE'], g.num_rels)
+
+    # prepare heterogeneous graph
     g_hetero, _ = load_data(dataset, feat_dim, to_homo=False)
     g_hetero = g_hetero.to(device)
     node_dict = {}
@@ -297,22 +186,34 @@ def profile(dataset, feat_dim):
     for etype in g_hetero.canonical_etypes:
         edge_dict[etype] = len(edge_dict)
 
-    net = HGT(features.size()[1], DEFAULT_DIM,
+    net = HGT(feat_dim, DEFAULT_DIM,
               DEFAULT_DIM, g.num_ntypes, g.num_rels).to(device)
-    net_hetero = NetHetero(node_dict, edge_dict,
-                           features.size()[1], DEFAULT_DIM, DEFAULT_DIM).to(device)
+    net_hetero = HGT_DGLHetero(node_dict, edge_dict,
+                               feat_dim, DEFAULT_DIM, DEFAULT_DIM).to(device)
+    net_pyg_bmm = HGT_PyG(feat_dim, DEFAULT_DIM,
+                          DEFAULT_DIM, g.num_ntypes, g.num_rels, mode='bmm').to(device)
+    net_pyg_slice = HGT_PyG(feat_dim, DEFAULT_DIM,
+                            DEFAULT_DIM, g.num_ntypes, g.num_rels, mode='slice').to(device)
 
     net.eval()
     net_hetero.eval()
+    net_pyg_bmm.eval()
+    net_pyg_slice.eval()
     with torch.no_grad():
-        steps = 1000
+        steps = 10
+        bench(net=net_pyg_slice, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
+              tag="PyG-slice", nvprof=False, steps=steps, memory=True)
         bench(net=net_hetero, net_params=(g_hetero, g_hetero.ndata['h']),
-              tag="HGT_slice on {}".format(dataset), nvprof=False, steps=steps, memory=True)
+              tag="DGL-slice", nvprof=False, steps=steps, memory=True)
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="compile on {}".format(dataset), nvprof=False, steps=steps, memory=True)
-        res = bench(net=net, net_params=(g, features, False),
-                    tag="naive", nvprof=False, steps=steps, memory=True)
+            g, features, "compile"), tag="Graphiler", nvprof=False, steps=steps, memory=True)
+        bench(net=net_pyg_bmm, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
+              tag="PyG-bmm", nvprof=False, steps=steps, memory=True)
+        res = bench(net=net, net_params=(
+            g, features, "batch"), tag="DGL-bmm", nvprof=False, steps=steps, memory=True)
         check_equal(compile_res, res)
+        bench(net=net, net_params=(g, features, "naive"),
+              tag="DGL-UDF", nvprof=False, steps=steps, memory=True)
 
 
 if __name__ == '__main__':

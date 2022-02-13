@@ -77,13 +77,13 @@ def profile(dataset, feat_dim):
     with torch.no_grad():
         steps = 1000
         bench(net=net_dgl, net_params=(g, features),
-              tag="DGL primitives", nvprof=False, steps=steps, memory=True)
+              tag="DGL-primitives", nvprof=False, steps=steps, memory=True)
         bench(net=net_pyg, net_params=(features, adj),
-              tag="PyG primitives", nvprof=False, steps=steps, memory=True)
+              tag="PyG-primitives", nvprof=False, steps=steps, memory=True)
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="compile", nvprof=False, steps=steps, memory=True)
+            g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True)
         res = bench(net=net, net_params=(g, features, False),
-                    tag="naive", nvprof=False, steps=steps, memory=True)
+                    tag="DGL-UDF", nvprof=False, steps=steps, memory=True)
         check_equal(compile_res, res)
 
 
