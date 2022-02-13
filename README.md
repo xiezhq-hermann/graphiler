@@ -16,7 +16,8 @@ mv libgraphiler.so ~/.dgl/
 cd ..
 python setup.py install
 
-python examples/GAT.py cora 1433
+# benchmark all GAT implementation on all datasets
+python examples/GAT/GAT.py all 0
 ```
 
 # Run within docker
@@ -31,6 +32,6 @@ Install docker and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter
 
 ```
 docker build -f docker/Dockerfile -t graphiler .
-docker run --gpus all -i -t graphiler python examples/GAT.py cora 1433
+docker run --gpus all -i -t graphiler python examples/GAT/GAT.py all 0
 ```
 

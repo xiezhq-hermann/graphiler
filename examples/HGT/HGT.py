@@ -200,7 +200,7 @@ def profile(dataset, feat_dim):
     net_pyg_bmm.eval()
     net_pyg_slice.eval()
     with torch.no_grad():
-        steps = 10
+        steps = 1000
         bench(net=net_pyg_slice, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
               tag="PyG-slice", nvprof=False, steps=steps, memory=True)
         bench(net=net_hetero, net_params=(g_hetero, g_hetero.ndata['h']),
