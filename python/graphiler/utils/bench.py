@@ -12,7 +12,7 @@ def check_equal(first, second):
     print("corectness check passed!")
 
 
-def bench(net, net_params, tag="", nvprof=False, memory=False, steps=1001, log=None):
+def bench(net, net_params, tag="", nvprof=False, memory=False, repeat=1000, log=None):
     # warm up
     for i in range(5):
         net(*net_params)
@@ -22,12 +22,12 @@ def bench(net, net_params, tag="", nvprof=False, memory=False, steps=1001, log=N
         if nvprof:
             profiler.start()
         start_time = time.time()
-        for i in range(steps):
+        for i in range(repeat):
             logits = net(*net_params)
         synchronize()
         if nvprof:
             profiler.stop()
-        elapsed_time = (time.time() - start_time) / steps * 1000
+        elapsed_time = (time.time() - start_time) / repeat * 1000
         print("{} elapsed time: {} ms/infer".format(tag, elapsed_time))
         log.at[tag, "time"] = elapsed_time 
         if memory:
