@@ -41,5 +41,5 @@ def init_df(datasets, tags, metrics):
         [datasets, tags, metrics],
         names=["dataset", "tag", "metric"]
     )
-    return pd.Series(np.zeros(len(datasets), len(tags), len(metrics)), index=index)
+    return pd.Series(np.zeros((len(datasets)*len(tags)*len(metrics),)), index=index)
  
