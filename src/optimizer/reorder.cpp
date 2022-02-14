@@ -28,13 +28,15 @@ void reorder(std::shared_ptr<MPDFGAnnotation> &mpdfg) {
       graph(%ndata, %dglgraph __params__):
         %edata = my_ops::__broadcast__(%ndata, %dglgraph)
         %res = __op__(%edata __params__)
-        return (%res))";
+        return (%res, %edata))";
 
+  // return edata as well to make it side effect free
   std::string dense_scatter = R"(
       graph(%ndata, %dglgraph __params__):
+        %edata = my_ops::__broadcast__(%ndata, %dglgraph)
         %n_res = __op__(%ndata __params__)
         %res = my_ops::__broadcast__(%n_res, %dglgraph)
-        return (%res))";
+        return (%res, %edata))";
 
   // patterns for special binary dense operators
   std::string dual_scatter_dense = R"(
@@ -103,5 +105,9 @@ void reorder(std::shared_ptr<MPDFGAnnotation> &mpdfg) {
   }
 
   rewriter.runOnGraph(mpdfg->DFG);
+  // Todo: apply until convergence?
+  dedup(mpdfg->DFG);
+  rewriter.runOnGraph(mpdfg->DFG);
+  dedup(mpdfg->DFG);
 }
 } // namespace graphiler
