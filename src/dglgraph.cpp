@@ -13,6 +13,8 @@ TORCH_LIBRARY(my_classes, m) {
                       at::optional<torch::Tensor>>())
       .def("SetNtypePointer", &DGLGraph::SetNtypePointer)
       .def("SetEtypePointer", &DGLGraph::SetEtypePointer)
+      .def("SetNtypeCOO", &DGLGraph::SetNtypeCOO)
+      .def("SetEtypeCOO", &DGLGraph::SetEtypeCOO)
       // not a good idea to wrap primitives as member functions
       // .def("BroadcastSrcNode", &DGLGraph::BroadcastSrcNodeForward)
       // .def("BroadcastDstNode", &DGLGraph::BroadcastDstNodeForward)

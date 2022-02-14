@@ -92,6 +92,10 @@ def load_data(name, feat_dim=DEFAULT_DIM, prepare=True, to_homo=True):
                 g = prepare_graph(dgl.to_homogeneous(g))
                 g.DGLGraph.SetNtypePointer(type_pointers['ntype_node_pointer'])
                 g.DGLGraph.SetEtypePointer(type_pointers['etype_edge_pointer'])
+                g.DGLGraph.SetNtypeCOO(
+                    g.ndata['_TYPE'].type(torch.LongTensor).cuda())
+                g.DGLGraph.SetEtypeCOO(
+                    g.edata['_TYPE'].type(torch.LongTensor).cuda())
 
                 g.num_ntypes = len(type_pointers['ntype_node_pointer']) - 1
                 # note #rels is different to #etypes in some cases
@@ -125,7 +129,7 @@ def prepare_graph(g, ntype=None):
 
     src, dst = g.edges()
     Coosrc, Coodst = src.type(
-        torch.IntTensor).cuda(), dst.type(torch.IntTensor).cuda()
+        torch.LongTensor).cuda(), dst.type(torch.LongTensor).cuda()
 
     reduce_node_pointer = [0] + g.in_degrees(g.nodes(ntype)).tolist()
     message_node_pointer = [0] + g.out_degrees(g.nodes(ntype)).tolist()
@@ -147,7 +151,8 @@ def prepare_hetero_graph_simplified(g, features, nkey='h'):
     ntype_pointer = np.cumsum(
         [0] + [g.number_of_nodes(ntype) for ntype in g.ntypes])
     for ntype, i in ntype_id.items():
-        g.nodes[ntype].data[nkey] = features[ntype_pointer[i]:ntype_pointer[i + 1]]
+        g.nodes[ntype].data[nkey] = features[ntype_pointer[i]
+            :ntype_pointer[i + 1]]
 
     etype_pointer = [0]
     for etype in g.canonical_etypes:

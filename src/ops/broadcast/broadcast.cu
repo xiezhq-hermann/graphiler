@@ -58,22 +58,25 @@ inline torch::Tensor BroadcastBaseForward(torch::Tensor features, int num_nodes,
 
 torch::Tensor BroadcastSrcNode(torch::Tensor features,
                                const c10::intrusive_ptr<DGLGraph> &graph) {
-  return BroadcastBaseForward(features, graph->num_nodes, graph->num_edges,
-                              graph->out_pointer, graph->out_edge_indices);
+  return features.index({graph->COO_src});
+  // return BroadcastBaseForward(features, graph->num_nodes, graph->num_edges,
+  //                             graph->out_pointer, graph->out_edge_indices);
 }
 torch::Tensor BroadcastDstNode(torch::Tensor features,
                                const c10::intrusive_ptr<DGLGraph> &graph) {
-  return BroadcastBaseForward(features, graph->num_nodes, graph->num_edges,
-                              graph->in_pointer, graph->in_edge_indices);
+  return features.index({graph->COO_dst});
+  // return BroadcastBaseForward(features, graph->num_nodes, graph->num_edges,
+  //                             graph->in_pointer, graph->in_edge_indices);
 }
 
 torch::Tensor BroadcastNodeType(torch::Tensor features,
                                 const c10::intrusive_ptr<DGLGraph> &graph) {
-  assert(graph->ntype_pointer.has_value());
-  torch::Tensor node_indices = torch::arange(
-      0, graph->num_nodes, torch::dtype(torch::kInt32).device(torch::kCUDA));
-  return BroadcastBaseForward(features, graph->num_ntypes, graph->num_nodes,
-                              graph->ntype_pointer.value(), node_indices);
+  assert(graph->ntype_COO.has_value());
+  return features.index({graph->ntype_COO.value()});
+  // torch::Tensor node_indices = torch::arange(
+  //     0, graph->num_nodes, torch::dtype(torch::kInt32).device(torch::kCUDA));
+  // return BroadcastBaseForward(features, graph->num_ntypes, graph->num_nodes,
+  //                             graph->ntype_pointer.value(), node_indices);
 }
 
 torch::Tensor BroadcastSrcNodeType(torch::Tensor features,
@@ -88,11 +91,13 @@ torch::Tensor BroadcastDstNodeType(torch::Tensor features,
 
 torch::Tensor BroadcastEdgeType(torch::Tensor features,
                                 const c10::intrusive_ptr<DGLGraph> &graph) {
-  assert(graph->etype_pointer.has_value());
-  torch::Tensor edge_indices = torch::arange(
-      0, graph->num_edges, torch::dtype(torch::kInt32).device(torch::kCUDA));
-  return BroadcastBaseForward(features, graph->num_etypes, graph->num_edges,
-                              graph->etype_pointer.value(), edge_indices);
+  assert(graph->etype_COO.has_value());
+  return features.index({graph->etype_COO.value()});
+  // assert(graph->etype_pointer.has_value());
+  // torch::Tensor edge_indices = torch::arange(
+  //     0, graph->num_edges, torch::dtype(torch::kInt32).device(torch::kCUDA));
+  // return BroadcastBaseForward(features, graph->num_etypes, graph->num_edges,
+  //                             graph->etype_pointer.value(), edge_indices);
 }
 
 static auto registry =

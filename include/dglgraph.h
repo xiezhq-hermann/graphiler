@@ -36,6 +36,14 @@ struct DGLGraph : torch::CustomClassHolder {
     num_etypes =
         etype_pointer.has_value() ? etype_pointer.value().size(0) - 1 : 1;
   }
+  inline void SetNtypeCOO(torch::Tensor pointer) {
+    ntype_COO = pointer;
+    assert(pointer.size(0) == num_nodes);
+  }
+  inline void SetEtypeCOO(torch::Tensor pointer) {
+    etype_COO = pointer;
+    assert(pointer.size(0) == num_edges);
+  }
 
   // Todo: int64 support
   int num_nodes;
@@ -61,5 +69,8 @@ struct DGLGraph : torch::CustomClassHolder {
   // ids of nodes/edges with the same type are assumed to be continuous
   at::optional<torch::Tensor> ntype_pointer;
   at::optional<torch::Tensor> etype_pointer;
+
+  at::optional<torch::Tensor> ntype_COO;
+  at::optional<torch::Tensor> etype_COO;
 };
 #endif // INCLUDE_GRAPHILER_DGL_GRAPH_H_

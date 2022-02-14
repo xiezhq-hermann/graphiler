@@ -122,7 +122,7 @@ SDDMMCoo_u_add_v_mul_alpha(torch::Tensor src_feature, torch::Tensor dst_feature,
   int feat_dim = src_feature.dim() == 1 ? 1 : src_feature.size(1);
   auto out = torch::zeros({graph->num_edges, feat_dim},
                           torch::dtype(torch::kFloat32).device(torch::kCUDA));
-  dgl::aten::SDDMMCoo<int32_t, 32>("add", graph->num_nodes, graph->num_nodes,
+  dgl::aten::SDDMMCoo<int64_t, 32>("add", graph->num_nodes, graph->num_nodes,
                                    graph->COO_src, graph->COO_dst, src_feature,
                                    dst_feature, out, 0, 2);
   return out;
