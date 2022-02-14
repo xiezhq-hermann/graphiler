@@ -166,57 +166,77 @@ class HGT(nn.Module):
         return g.ndata.pop('h')
 
 
-def profile(dataset, feat_dim):
+def profile(dataset, feat_dim, steps=1000):
     log = init_log(["PyG-slice", "DGL-slice",
                     "Graphiler", "PyG-bmm", "DGL-bmm", "DGL-UDF"], ["time", "mem"])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
-    g, features = g.to(device), features.to(device)
-
-    # graph format for PyG
-    u, v = g.edges()
-    adj = torch.stack([u, v]).to(device)
-    src_type, dst_type = get_ntype(
-        adj, g.edata['_TYPE'], g.ndata['_TYPE'], g.num_rels)
-
-    # prepare heterogeneous graph
     g_hetero, _ = load_data(dataset, feat_dim, to_homo=False)
-    g_hetero = g_hetero.to(device)
-    node_dict = {}
-    edge_dict = {}
-    for ntype in g_hetero.ntypes:
-        node_dict[ntype] = len(node_dict)
-    for etype in g_hetero.canonical_etypes:
-        edge_dict[etype] = len(edge_dict)
+    features = features.to(device)
 
-    net = HGT(feat_dim, DEFAULT_DIM,
-              DEFAULT_DIM, g.num_ntypes, g.num_rels).to(device)
-    net_hetero = HGT_DGLHetero(node_dict, edge_dict,
-                               feat_dim, DEFAULT_DIM, DEFAULT_DIM).to(device)
-    net_pyg_bmm = HGT_PyG(feat_dim, DEFAULT_DIM,
-                          DEFAULT_DIM, g.num_ntypes, g.num_rels, mode='bmm').to(device)
-    net_pyg_slice = HGT_PyG(feat_dim, DEFAULT_DIM,
-                            DEFAULT_DIM, g.num_ntypes, g.num_rels, mode='slice').to(device)
+    def run_baseline_graphiler(g, features):
+        g = g.to(device)
+        net = HGT(feat_dim, DEFAULT_DIM,
+                  DEFAULT_DIM, g.num_ntypes, g.num_rels).to(device)
+        net.eval()
+        with torch.no_grad():
+            compile_res = bench(net=net, net_params=(
+                g, features, "compile"), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
+            res = bench(net=net, net_params=(
+                g, features, "batch"), tag="DGL-bmm", nvprof=False, steps=steps, memory=True, log=log)
+            check_equal(compile_res, res)
+            bench(net=net, net_params=(g, features, "naive"),
+                  tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
+        del g, net, compile_res, res
 
-    net.eval()
-    net_hetero.eval()
-    net_pyg_bmm.eval()
-    net_pyg_slice.eval()
-    with torch.no_grad():
-        steps = 1000
-        bench(net=net_pyg_slice, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
-              tag="PyG-slice", nvprof=False, steps=steps, memory=True, log=log)
-        bench(net=net_hetero, net_params=(g_hetero, g_hetero.ndata['h']),
-              tag="DGL-slice", nvprof=False, steps=steps, memory=True, log=log)
-        compile_res = bench(net=net, net_params=(
-            g, features, "compile"), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
-        bench(net=net_pyg_bmm, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
-              tag="PyG-bmm", nvprof=False, steps=steps, memory=True, log=log)
-        res = bench(net=net, net_params=(
-            g, features, "batch"), tag="DGL-bmm", nvprof=False, steps=steps, memory=True, log=log)
-        check_equal(compile_res, res)
-        bench(net=net, net_params=(g, features, "naive"),
-              tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
+    def run_dgl_slice(g_hetero, features):
+        g_hetero = g_hetero.to(device)
+        node_dict = {}
+        edge_dict = {}
+        for ntype in g_hetero.ntypes:
+            node_dict[ntype] = len(node_dict)
+        for etype in g_hetero.canonical_etypes:
+            edge_dict[etype] = len(edge_dict)
+        net_hetero = HGT_DGLHetero(node_dict, edge_dict,
+                                   feat_dim, DEFAULT_DIM, DEFAULT_DIM).to(device)
+        net_hetero.eval()
+        with torch.no_grad():
+            bench(net=net_hetero, net_params=(g_hetero, g_hetero.ndata['h']),
+                  tag="DGL-slice", nvprof=False, steps=steps, memory=True, log=log)
+        del g_hetero, node_dict, edge_dict, net_hetero
+
+    def run_pyg_slice(g, features):
+        u, v = g.edges()
+        adj = torch.stack([u, v]).to(device)
+        src_type, dst_type = get_ntype(
+            adj, g.edata['_TYPE'], g.ndata['_TYPE'], g.num_rels)
+        net_pyg_slice = HGT_PyG(feat_dim, DEFAULT_DIM,
+                                DEFAULT_DIM, g.num_ntypes, g.num_rels, mode='slice').to(device)
+        net_pyg_slice.eval()
+        with torch.no_grad():
+            bench(net=net_pyg_slice, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
+                  tag="PyG-slice", nvprof=False, steps=steps, memory=True, log=log)
+        del u, v, adj, src_type, dst_type, net_pyg_slice
+
+    def run_pyg_bmm(g, features):
+        u, v = g.edges()
+        adj = torch.stack([u, v]).to(device)
+        src_type, dst_type = get_ntype(
+            adj, g.edata['_TYPE'], g.ndata['_TYPE'], g.num_rels)
+        net_pyg_bmm = HGT_PyG(feat_dim, DEFAULT_DIM,
+                              DEFAULT_DIM, g.num_ntypes, g.num_rels, mode='bmm').to(device)
+        net_pyg_bmm.eval()
+        with torch.no_grad():
+            bench(net=net_pyg_bmm, net_params=(adj, features, g.edata['_TYPE'].to(device), g.ndata['_TYPE'].to(device), src_type, dst_type),
+                  tag="PyG-bmm", nvprof=False, steps=steps, memory=True, log=log)
+        del u, v, adj, src_type, dst_type, net_pyg_bmm
+
+    run_baseline_graphiler(g, features)
+    run_dgl_slice(g_hetero, features)
+    run_pyg_bmm(g, features)
+    run_pyg_slice(g, features)
+
+    return log
 
 
 if __name__ == '__main__':

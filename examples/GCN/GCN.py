@@ -57,38 +57,52 @@ class GCN(nn.Module):
         return x
 
 
-def profile(dataset, feat_dim):
+def profile(dataset, feat_dim, steps=1000):
     log = init_log(["DGL-primitives", "PyG-primitives",
                     "Graphiler", "DGL-UDF"], ["time", "mem"])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
-    # graph format for PyG
-    u, v = g.edges()
-    adj = SparseTensor(row=u, col=v, sparse_sizes=(
-        g.num_src_nodes(), g.num_dst_nodes())).to(device)
-    g, features = g.to(device), features.to(device)
+    features = features.to(device)
 
-    net = GCN(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-              out_dim=DEFAULT_DIM).to(device)
-    net_dgl = GCN_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-                      out_dim=DEFAULT_DIM).to(device)
-    net_pyg = GCN_PyG(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-                      out_dim=DEFAULT_DIM).to(device)
+    def run_baseline_and_graphiler(g, features):
+        g = g.to(device)
+        net = GCN(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                out_dim=DEFAULT_DIM).to(device)
+        net.eval()
+        with torch.no_grad():
+            compile_res = bench(net=net, net_params=(
+                g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
+            res = bench(net=net, net_params=(g, features, False),
+                        tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
+            check_equal(compile_res, res)
+        del g, net, compile_res, res
 
-    net.eval()
-    net_dgl.eval()
-    net_pyg.eval()
-    with torch.no_grad():
-        steps = 1000
-        bench(net=net_dgl, net_params=(g, features),
-              tag="DGL-primitives", nvprof=False, steps=steps, memory=True, log=log)
-        bench(net=net_pyg, net_params=(features, adj),
-              tag="PyG-primitives", nvprof=False, steps=steps, memory=True, log=log)
-        compile_res = bench(net=net, net_params=(
-            g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
-        res = bench(net=net, net_params=(g, features, False),
-                    tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
-        check_equal(compile_res, res)
+    def run_pyg(g, features):
+        u, v = g.edges()
+        adj = SparseTensor(row=u, col=v, sparse_sizes=(
+            g.num_src_nodes(), g.num_dst_nodes())).to(device)
+        net_pyg = GCN_PyG(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                        out_dim=DEFAULT_DIM).to(device)
+        net_pyg.eval()
+        with torch.no_grad():
+            bench(net=net_pyg, net_params=(features, adj),
+                tag="PyG-primitives", nvprof=False, steps=steps, memory=True, log=log)
+        return u, v, adj, net_pyg
+    
+    def run_dgl(g, features):
+        g = g.to(device)
+        net_dgl = GCN_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                        out_dim=DEFAULT_DIM).to(device)
+        net_dgl.eval()
+        with torch.no_grad():
+            bench(net=net_dgl, net_params=(g, features),
+                tag="DGL-primitives", nvprof=False, steps=steps, memory=True, log=log)
+    
+    run_baseline_and_graphiler(g, features)
+    run_pyg(g, features)
+    run_dgl(g, features)
+
+    return log
 
 
 if __name__ == '__main__':
