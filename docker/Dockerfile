@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget\
     git-all\
     cmake\
+    gnuplot\
+    texlive-font-utils\
     && rm -rf /var/lib/apt/lists/*
 
 # install miniconda
