@@ -17,10 +17,8 @@ void split(std::shared_ptr<MPDFGAnnotation> &mpdfg) {
       graph(%src, %dst, %weight, %dim):
         %zero : int = prim::Constant[value=0]()
         %one : int = prim::Constant[value=1]()
-        %size_s : int[] = aten::size(%src)
-        %size_d : int[] = aten::size(%dst)
-        %dim_s : int = aten::__getitem__(%size_s, %one)
-        %dim_d : int = aten::__getitem__(%size_d, %one)
+        %dim_s : int = my_ops::get_feat_dim(%src)
+        %dim_d : int = my_ops::get_feat_dim(%dst)
         %split_size : int[] = prim::ListConstruct(%dim_s, %dim_d)
         %splited : Tensor[] = aten::split(%weight, %split_size, %zero)
         %weight_src : Tensor, %weight_dst : Tensor = prim::ListUnpack(%splited)

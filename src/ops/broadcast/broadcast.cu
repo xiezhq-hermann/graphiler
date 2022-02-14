@@ -1,5 +1,13 @@
 #include "../ops.cuh"
 
+int64_t get_feat_dim(torch::Tensor features) {
+  int64_t feat_dim = 1;
+  for (int64_t i = 1; i < features.dim(); i++) {
+    feat_dim *= features.size(i);
+  }
+  return feat_dim;
+}
+
 // Todo: COO version
 inline torch::Tensor BroadcastBaseForward(torch::Tensor features, int num_nodes,
                                           int num_edges, torch::Tensor pointer,
@@ -106,4 +114,5 @@ static auto registry =
             &BroadcastDstNodeType)
         .op("my_ops::BroadcastEdgeType(Tensor x, "
             "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
-            &BroadcastEdgeType);
+            &BroadcastEdgeType)
+        .op("my_ops::get_feat_dim", &get_feat_dim);

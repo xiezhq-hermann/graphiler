@@ -14,7 +14,8 @@ setup(
             'src/pybind.cpp',
             'src/builder/builder.cpp',
             'src/optimizer/dedup.cpp',
-            'src/optimizer/split.cpp'
+            'src/optimizer/split.cpp',
+            'src/optimizer/reorder.cpp'
         ]),
     ],
     cmdclass={

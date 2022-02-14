@@ -15,4 +15,5 @@
 namespace graphiler {
 void dedup(std::shared_ptr<torch::jit::Graph> &graph);
 void split(std::shared_ptr<MPDFGAnnotation> &mpdfg);
+void reorder(std::shared_ptr<MPDFGAnnotation> &mpdfg);
 } // namespace graphiler
