@@ -29,7 +29,7 @@ def bench(net, net_params, tag="", nvprof=False, memory=False, steps=1001, log=N
             profiler.stop()
         elapsed_time = (time.time() - start_time) / steps * 1000
         print("{} elapsed time: {} ms/infer".format(tag, elapsed_time))
-        log.at[tag, "elapsed_time"] = elapsed_time 
+        log.at[tag, "time"] = elapsed_time 
         if memory:
             max_mem_consumption = max_memory_allocated() / 1048576
             print("max memory consumption: {} MB".format(max_mem_consumption))
