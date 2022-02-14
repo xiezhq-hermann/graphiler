@@ -39,7 +39,7 @@ def bench(net, net_params, tag="", nvprof=False, memory=False, steps=1001, prof_
 def init_df(datasets, tags, metrics):
     index = pd.MultiIndex.from_product(
         [datasets, tags, metrics],
-        names=["datasets", "tag", "metric"]
+        names=["dataset", "tag", "metric"]
     )
     return pd.Series(np.zeros(len(datasets), len(tags), len(metrics)), index=index)
  
