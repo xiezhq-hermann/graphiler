@@ -1,10 +1,4 @@
-python scripts/plot.py --model GAT --time
-python scripts/plot.py --model GAT --mem
-python scripts/plot.py --model GCN --time
-python scripts/plot.py --model GCN --mem
-python scripts/plot.py --model HGT --time
-python scripts/plot.py --model HGT --mem
-python scripts/plot.py --model RGCN --time
-python scripts/plot.py --model RGCN --mem
-python scripts/plot.py --model CGAT --time
-python scripts/plot.py --model CGAT --mem
+for model in GAT GCN HGT RGCN CGAT
+do
+  python scripts/plot.py --model ${model} --time
+done
