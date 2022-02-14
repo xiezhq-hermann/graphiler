@@ -18,6 +18,8 @@ add_library(graphiler SHARED
     # note dgl_primitives requires CUDA version >= 11
     src/ops/dgl_primitives/spmm.cu
     src/ops/dgl_primitives/bcast.cc
+    src/ops/dgl_primitives/sddmm.cu
+    src/ops/segment_mm/segment_mm.cu
     )
     
 # Todo: more architectures

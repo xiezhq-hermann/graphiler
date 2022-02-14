@@ -279,57 +279,86 @@ __global__ void u_mul_e_sum_kernel_neat(
   }
 }
 
-// ad hoc implementation
-torch::Tensor u_mul_e_sum(torch::Tensor ufeature, torch::Tensor efeature,
-                          std::vector<int64_t> dims, bool keep_dim,
-                          at::optional<at::ScalarType> dtype,
-                          torch::Tensor node_id, torch::Tensor node_index,
-                          torch::Tensor edge_index,
-                          torch::Tensor node_pointer) {
+} // namespace aten
+} // namespace dgl
 
-  const int num_nodes = node_id.sizes()[0];
-  const int feat_dim = ufeature.size(1);
-  auto out = torch::zeros({num_nodes, feat_dim},
+// Todo: dedup and simplify the interfaces
+torch::Tensor src_mul_e_sum(torch::Tensor ufeature, torch::Tensor efeature,
+                            std::vector<int64_t> dims, bool keep_dim,
+                            at::optional<at::ScalarType> dtype,
+                            const c10::intrusive_ptr<DGLGraph> &graph) {
+
+  int feat_dim = ufeature.dim() == 1 ? 1 : ufeature.size(1);
+  auto out = torch::zeros({graph->num_nodes, feat_dim},
                           torch::dtype(torch::kFloat32).device(torch::kCUDA));
-  // Todo: the template parameters should be changed for different GPU models
   if (feat_dim % 64 == 0) {
-    // dim3 blocks((num_nodes + 7) / 8, feat_dim / 64, 1);
-    // dim3 threads(32, 8, 1);
-    // u_mul_e_sum_kernel_neat<8, 64, 2><<<blocks, threads>>>(
-    dim3 blocks(num_nodes, 1, 1);
+    dim3 blocks(graph->num_nodes, 1, 1);
     dim3 threads(32, 1, 1);
-    u_mul_e_sum_kernel_neat<1, 64, 2><<<blocks, threads>>>(
-        num_nodes, feat_dim, ufeature.data_ptr<float>(),
-        efeature.data_ptr<float>(), node_index.data_ptr<int>(),
-        edge_index.data_ptr<int>(), node_pointer.data_ptr<int>(),
-        out.data_ptr<float>());
+    dgl::aten::u_mul_e_sum_kernel_neat<1, 64, 2><<<blocks, threads>>>(
+        graph->num_nodes, feat_dim, ufeature.data_ptr<float>(),
+        efeature.data_ptr<float>(), graph->in_node_indices.data_ptr<int>(),
+        graph->in_edge_indices.data_ptr<int>(),
+        graph->in_pointer.data_ptr<int>(), out.data_ptr<float>());
   } else if (feat_dim % 32 == 0) {
-    dim3 blocks((num_nodes + 3) / 4, 1, 1);
+    dim3 blocks((graph->num_nodes + 3) / 4, 1, 1);
     dim3 threads(32, 4, 1);
-    u_mul_e_sum_kernel_neat<4, 32, 1><<<blocks, threads>>>(
-        num_nodes, feat_dim, ufeature.data_ptr<float>(),
-        efeature.data_ptr<float>(), node_index.data_ptr<int>(),
-        edge_index.data_ptr<int>(), node_pointer.data_ptr<int>(),
-        out.data_ptr<float>());
+    dgl::aten::u_mul_e_sum_kernel_neat<4, 32, 1><<<blocks, threads>>>(
+        graph->num_nodes, feat_dim, ufeature.data_ptr<float>(),
+        efeature.data_ptr<float>(), graph->in_node_indices.data_ptr<int>(),
+        graph->in_edge_indices.data_ptr<int>(),
+        graph->in_pointer.data_ptr<int>(), out.data_ptr<float>());
   } else {
-    dim3 blocks((num_nodes + 15) / 16, 1, 1);
+    dim3 blocks((graph->num_nodes + 15) / 16, 1, 1);
     dim3 threads(feat_dim, 16, 1);
-    u_mul_e_sum_kernel<<<blocks, threads>>>(
-        num_nodes, feat_dim, ufeature.data_ptr<float>(),
-        efeature.data_ptr<float>(), node_index.data_ptr<int>(),
-        edge_index.data_ptr<int>(), node_pointer.data_ptr<int>(),
-        out.data_ptr<float>());
+    dgl::aten::u_mul_e_sum_kernel<<<blocks, threads>>>(
+        graph->num_nodes, feat_dim, ufeature.data_ptr<float>(),
+        efeature.data_ptr<float>(), graph->in_node_indices.data_ptr<int>(),
+        graph->in_edge_indices.data_ptr<int>(),
+        graph->in_pointer.data_ptr<int>(), out.data_ptr<float>());
   }
   return out;
 }
 
-} // namespace aten
-} // namespace dgl
+torch::Tensor dst_mul_e_sum(torch::Tensor ufeature, torch::Tensor efeature,
+                            std::vector<int64_t> dims, bool keep_dim,
+                            at::optional<at::ScalarType> dtype,
+                            const c10::intrusive_ptr<DGLGraph> &graph) {
+
+  int feat_dim = ufeature.dim() == 1 ? 1 : ufeature.size(1);
+  auto out = torch::zeros({graph->num_nodes, feat_dim},
+                          torch::dtype(torch::kFloat32).device(torch::kCUDA));
+  if (feat_dim % 64 == 0) {
+    dim3 blocks(graph->num_nodes, 1, 1);
+    dim3 threads(32, 1, 1);
+    dgl::aten::u_mul_e_sum_kernel_neat<1, 64, 2><<<blocks, threads>>>(
+        graph->num_nodes, feat_dim, ufeature.data_ptr<float>(),
+        efeature.data_ptr<float>(), graph->out_node_indices.data_ptr<int>(),
+        graph->out_edge_indices.data_ptr<int>(),
+        graph->out_pointer.data_ptr<int>(), out.data_ptr<float>());
+  } else if (feat_dim % 32 == 0) {
+    dim3 blocks((graph->num_nodes + 3) / 4, 1, 1);
+    dim3 threads(32, 4, 1);
+    dgl::aten::u_mul_e_sum_kernel_neat<4, 32, 1><<<blocks, threads>>>(
+        graph->num_nodes, feat_dim, ufeature.data_ptr<float>(),
+        efeature.data_ptr<float>(), graph->out_node_indices.data_ptr<int>(),
+        graph->out_edge_indices.data_ptr<int>(),
+        graph->out_pointer.data_ptr<int>(), out.data_ptr<float>());
+  } else {
+    dim3 blocks((graph->num_nodes + 15) / 16, 1, 1);
+    dim3 threads(feat_dim, 16, 1);
+    dgl::aten::u_mul_e_sum_kernel<<<blocks, threads>>>(
+        graph->num_nodes, feat_dim, ufeature.data_ptr<float>(),
+        efeature.data_ptr<float>(), graph->out_node_indices.data_ptr<int>(),
+        graph->out_edge_indices.data_ptr<int>(),
+        graph->out_pointer.data_ptr<int>(), out.data_ptr<float>());
+  }
+  return out;
+}
 
 // Todo: simplify the interfaces
-torch::Tensor SpMMCsrForward(torch::Tensor features, std::vector<int64_t> dims,
-                             bool keep_dim, at::optional<at::ScalarType> dtype,
-                             const c10::intrusive_ptr<DGLGraph> &graph) {
+torch::Tensor SpMMEdge(torch::Tensor features, std::vector<int64_t> dims,
+                       bool keep_dim, at::optional<at::ScalarType> dtype,
+                       const c10::intrusive_ptr<DGLGraph> &graph) {
   int feat_dim = features.dim() == 1 ? 1 : features.size(1);
   auto out = torch::zeros({graph->num_nodes, feat_dim},
                           torch::dtype(torch::kFloat32).device(torch::kCUDA));
@@ -337,24 +366,41 @@ torch::Tensor SpMMCsrForward(torch::Tensor features, std::vector<int64_t> dims,
       at::empty({0}, torch::dtype(torch::kFloat32).device(torch::kCUDA));
   std::vector<at::Tensor> empty_list;
   empty_list.push_back(empty);
-  // Todo: ad hoc implementation, should be separated
-  if (features.sizes()[0] == graph->num_nodes) {
-    dgl::aten::SpMMCsr<int32_t, 32>("copy_lhs", "sum", graph->num_nodes,
-                                    graph->num_nodes, graph->in_pointer,
-                                    graph->in_node_indices, empty, features,
-                                    empty, out, empty_list);
-  } else {
-    dgl::aten::SpMMCsr<int32_t, 32>("copy_lhs", "sum", graph->num_nodes,
-                                    graph->num_nodes, graph->in_pointer,
-                                    graph->in_edge_indices, empty, features,
-                                    empty, out, empty_list);
-  }
+  dgl::aten::SpMMCsr<int32_t, 32>(
+      "copy_lhs", "sum", graph->num_nodes, graph->num_nodes, graph->in_pointer,
+      graph->in_edge_indices, empty, features, empty, out, empty_list);
   return out;
 }
 
-static auto registry = torch::RegisterOperators(
-    "my_ops::SpMM(Tensor x, int[] dim, bool k, int? t, "
-    "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
-    &SpMMCsrForward);
-// Todo
-// .op("my_ops::gspmm_u_mul_e_sum", &u_mul_e_sum);
+torch::Tensor SpMMSrc(torch::Tensor features, std::vector<int64_t> dims,
+                      bool keep_dim, at::optional<at::ScalarType> dtype,
+                      const c10::intrusive_ptr<DGLGraph> &graph) {
+  int feat_dim = features.dim() == 1 ? 1 : features.size(1);
+  auto out = torch::zeros({graph->num_nodes, feat_dim},
+                          torch::dtype(torch::kFloat32).device(torch::kCUDA));
+  auto empty =
+      at::empty({0}, torch::dtype(torch::kFloat32).device(torch::kCUDA));
+  std::vector<at::Tensor> empty_list;
+  empty_list.push_back(empty);
+  dgl::aten::SpMMCsr<int32_t, 32>(
+      "copy_lhs", "sum", graph->num_nodes, graph->num_nodes, graph->in_pointer,
+      graph->in_node_indices, empty, features, empty, out, empty_list);
+  return out;
+}
+
+static auto registry =
+    torch::RegisterOperators(
+        "my_ops::SpMMEdge(Tensor x, int[] dim, bool k, int? t, "
+        "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
+        &SpMMEdge)
+        .op("my_ops::SpMMSrc(Tensor x, int[] dim, bool k, int? t, "
+            "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor y",
+            &SpMMSrc)
+        .op("my_ops::gspmm_src_mul_e_sum(Tensor x, Tensor y, int[] dim, bool "
+            "k, int? t, "
+            "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor z",
+            &src_mul_e_sum)
+        .op("my_ops::gspmm_dst_mul_e_sum(Tensor x, Tensor y, int[] dim, bool "
+            "k, int? t, "
+            "__torch__.torch.classes.my_classes.DGLGraph g) -> Tensor z",
+            &dst_mul_e_sum);

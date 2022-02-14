@@ -8,8 +8,8 @@ const static std::vector<std::string> BROADCAST = {
     "BroadcastDstNodeType", "BroadcastEdgeType",    "BroadcastNodeType"};
 
 // Todo: more operators
-const static std::vector<std::string> UNARY_DENSE = {"aten::relu",
-                                                     "aten::sigmoid"};
+const static std::vector<std::string> UNARY_DENSE = {
+    "aten::relu", "aten::sigmoid", "aten::squeeze"};
 // these two should be distinguished by input data residency instead of op name
 const static std::vector<std::string> BINARY_DENSE = {"aten::mm", "aten::pow",
                                                       "aten::unsqueeze"};
@@ -104,9 +104,6 @@ void reorder(std::shared_ptr<MPDFGAnnotation> &mpdfg) {
         std::regex_replace(new_subgraph, std::regex("__broadcast__"), b));
   }
 
-  rewriter.runOnGraph(mpdfg->DFG);
-  // Todo: apply until convergence?
-  dedup(mpdfg->DFG);
   rewriter.runOnGraph(mpdfg->DFG);
   dedup(mpdfg->DFG);
 }

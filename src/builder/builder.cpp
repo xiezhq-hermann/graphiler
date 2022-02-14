@@ -19,7 +19,7 @@ static std::unordered_map<size_t, std::vector<IValue>> CONSTANT_MAP{};
 // Todo: more reduce and norm type operators in a more organized
 const static std::unordered_map<std::string, Movement> MOVEMENT_MAP{
     {"my_ops::SegmentSoftmax", Movement::Norm},
-    {"my_ops::SpMM", Movement::Reduce}};
+    {"my_ops::SpMMEdge", Movement::Reduce}};
 std::string
 operator_lowering(const std::string &n_kind,
                   const std::vector<Value *> &new_inputs,
@@ -35,7 +35,7 @@ operator_lowering(const std::string &n_kind,
     auto dims = CONSTANT_MAP[new_inputs[1]->unique()];
     assert(dims.size() == 1);
     if (dims[0].toIntList()[0] == 1) {
-      return "my_ops::SpMM";
+      return "my_ops::SpMMEdge";
     }
   }
   return "";

@@ -1,4 +1,4 @@
-from graphiler.mpdfg import split, reorder
+from graphiler.mpdfg import split, reorder, fusion
 
 
 def optimizer(mpdfg, opt_level):
@@ -8,5 +8,8 @@ def optimizer(mpdfg, opt_level):
         split(mpdfg)
         reorder(mpdfg)
     if opt_level > 1:
-        pass
+        # convergence check?
+        for _ in range(3):
+            reorder(mpdfg)
+            fusion(mpdfg)
     return
