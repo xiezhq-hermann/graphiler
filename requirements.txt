@@ -1,12 +1,13 @@
 dgl-cu111==0.6.1
 ogb==1.3.2
 torch-geometric==2.0.1
+pandas==1.3.5
 
 --find-links https://download.pytorch.org/whl/lts/1.8/torch_lts.html
 torch==1.8.2+cu111
 
 --find-links https://data.pyg.org/whl/torch-1.8.0+cu111.html
-torch-scatter
-torch-sparse
-torch-cluster
-torch-spline-conv
+torch-scatter==2.0.8
+torch-sparse==0.6.12
+torch-cluster==1.5.9
+torch-spline-conv==1.2.1

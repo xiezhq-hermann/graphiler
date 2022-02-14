@@ -1,13 +1,15 @@
 import sys
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
+import pandas as pd
 
+from dgl import DGLError
 from torch_sparse import SparseTensor
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM
+from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM, init_log
 
 from GAT_DGL import GAT_DGL
 from GAT_PyG import GAT_PyG
@@ -72,20 +74,28 @@ class GAT(nn.Module):
 
 
 def profile(dataset, feat_dim):
+    log = init_log(['DGL-primitives', 'PyG-primitives', 'Graphiler', 'DGL-UDF'], ['time', 'mem'])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
     # graph format for PyG
-    u, v = g.edges()
-    adj = SparseTensor(row=u, col=v, sparse_sizes=(
-        g.num_src_nodes(), g.num_dst_nodes())).to(device)
-    g, features = g.to(device), features.to(device)
+    try:
+        u, v = g.edges()
+        adj = SparseTensor(row=u, col=v, sparse_sizes=(
+            g.num_src_nodes(), g.num_dst_nodes())).to(device)
+        g, features = g.to(device), features.to(device)
 
-    net = GAT(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-              out_dim=DEFAULT_DIM).to(device)
-    net_dgl = GAT_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-                      out_dim=DEFAULT_DIM).to(device)
-    net_pyg = GAT_PyG(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-                      out_dim=DEFAULT_DIM).to(device)
+        net = GAT(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                  out_dim=DEFAULT_DIM).to(device)
+        net_dgl = GAT_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                          out_dim=DEFAULT_DIM).to(device)
+        net_pyg = GAT_PyG(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                          out_dim=DEFAULT_DIM).to(device)
+    except (RuntimeError, DGLError):
+        print("{} OOM".format(dataset))
+        return
+    except BaseException as e:
+        print(e)
+        raise
 
     net.eval()
     net_dgl.eval()
@@ -93,14 +103,16 @@ def profile(dataset, feat_dim):
     with torch.no_grad():
         steps = 1000
         bench(net=net_dgl, net_params=(g, features),
-              tag="DGL-primitives", nvprof=False, steps=steps, memory=True)
+              tag="DGL-primitives", nvprof=False, steps=steps, memory=True, log=log)
         bench(net=net_pyg, net_params=(features, adj),
-              tag="PyG-primitives", nvprof=False, steps=steps, memory=True)
+              tag="PyG-primitives", nvprof=False, steps=steps, memory=True, log=log)
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True)
+            g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
         res = bench(net=net, net_params=(g, features, False),
-                    tag="DGL-UDF", nvprof=False, steps=steps, memory=True)
+                    tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
         check_equal(compile_res, res)
+
+    return log
 
 
 if __name__ == '__main__':
@@ -108,7 +120,9 @@ if __name__ == '__main__':
         print("usage: python GAT.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
+        log = {}
         for d in homo_dataset:
-            profile(d, homo_dataset[d])
+            log[d] = profile(d, homo_dataset[d])
+        pd.DataFrame(log).to_pickle("./GAT.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]))

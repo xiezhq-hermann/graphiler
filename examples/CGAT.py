@@ -5,9 +5,8 @@ from torch import nn
 import torch.nn.functional as F
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM
+from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM, init_log
 device = setup()
-
 
 # Todo: hyper message residency?
 def message_func(edges: EdgeBatchDummy, fc_weight, attn_weight):
@@ -67,6 +66,7 @@ class CGAT(nn.Module):
 
 
 def profile(dataset, feat_dim):
+    log = init_log(homo_dataset, ["compile", "naive"], ["time", "mem"])
     g, features = load_data(dataset, feat_dim)
     g, features = g.to(device), features.to(device)
 
@@ -76,9 +76,9 @@ def profile(dataset, feat_dim):
     net.eval()
     with torch.no_grad():
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="compile", nvprof=False)
+            g, features, True), tag="compile", nvprof=False, log=log)
         res = bench(net=net, net_params=(g, features, False),
-                    tag="naive", nvprof=False)
+                    tag="naive", nvprof=False, log=log)
         check_equal(compile_res, res)
 
 
@@ -87,7 +87,9 @@ if __name__ == "__main__":
         print("usage: python ConstrainedGAT.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
+        log = {}
         for d in homo_dataset:
-            profile(d, homo_dataset[d])
+            log[d] = profile(d, homo_dataset[d], log)
+        pd.DataFrame(log).to_pickle("./CGAT.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]))

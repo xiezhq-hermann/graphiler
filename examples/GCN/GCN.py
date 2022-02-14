@@ -2,12 +2,14 @@ import sys
 
 import torch
 import torch.nn as nn
+import pandas as pd
+import numpy as np
 import torch.nn.functional as F
 
 from torch_sparse import SparseTensor
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM
+from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM, init_log
 
 from GCN_DGL import GCN_DGL
 from GCN_PyG import GCN_PyG
@@ -56,6 +58,8 @@ class GCN(nn.Module):
 
 
 def profile(dataset, feat_dim):
+    log = init_log(["DGL-primitives", "PyG-primitives",
+                    "Graphiler", "DGL-UDF"], ["time", "mem"])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
     # graph format for PyG
@@ -77,13 +81,13 @@ def profile(dataset, feat_dim):
     with torch.no_grad():
         steps = 1000
         bench(net=net_dgl, net_params=(g, features),
-              tag="DGL-primitives", nvprof=False, steps=steps, memory=True)
+              tag="DGL-primitives", nvprof=False, steps=steps, memory=True, log=log)
         bench(net=net_pyg, net_params=(features, adj),
-              tag="PyG-primitives", nvprof=False, steps=steps, memory=True)
+              tag="PyG-primitives", nvprof=False, steps=steps, memory=True, log=log)
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True)
+            g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
         res = bench(net=net, net_params=(g, features, False),
-                    tag="DGL-UDF", nvprof=False, steps=steps, memory=True)
+                    tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
         check_equal(compile_res, res)
 
 
@@ -92,7 +96,9 @@ if __name__ == '__main__':
         print("usage: python GCN.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
+        log = {}
         for d in homo_dataset:
-            profile(d, homo_dataset[d])
+            log[d] = profile(d, homo_dataset[d])
+        pd.DataFrame(log).to_pickle("./GCN.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]))
