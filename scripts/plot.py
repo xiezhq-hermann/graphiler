@@ -54,7 +54,7 @@ set ytics nomirror
 
 set xlabel "Dataset" font "Times, 24"
 set ylabel "GPU Memory Usage/MB" font "Times, 24"
-set yrange [0:6000]
+set yrange [0:16000]
 
 set offset -0.3, -0.3, 0, 0
 
