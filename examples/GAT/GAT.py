@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import numpy as np
 import pandas as pd
 
-from dgl import DGLError
 from torch_sparse import SparseTensor
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
@@ -73,44 +72,50 @@ class GAT(nn.Module):
         return h
 
 
-def profile(dataset, feat_dim):
+def profile(dataset, feat_dim, steps=1000):
     log = init_log(['DGL-primitives', 'PyG-primitives', 'Graphiler', 'DGL-UDF'], ['time', 'mem'])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
-    # graph format for PyG
-    try:
+    features = features.to(device)
+
+    def run_baseline_graphiler(g, features):
+        g = g.to(device)
+        net = GAT(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                  out_dim=DEFAULT_DIM).to(device)
+        net.eval()
+        with torch.no_grad():
+            compile_res = bench(net=net, net_params=(
+                g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
+            res = bench(net=net, net_params=(g, features, False),
+                        tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
+            check_equal(compile_res, res)
+        del g, net, compile_res, res
+
+    def run_pyg(g, features):
         u, v = g.edges()
         adj = SparseTensor(row=u, col=v, sparse_sizes=(
             g.num_src_nodes(), g.num_dst_nodes())).to(device)
-        g, features = g.to(device), features.to(device)
-
-        net = GAT(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-                  out_dim=DEFAULT_DIM).to(device)
-        net_dgl = GAT_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-                          out_dim=DEFAULT_DIM).to(device)
         net_pyg = GAT_PyG(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
                           out_dim=DEFAULT_DIM).to(device)
-    except (RuntimeError, DGLError):
-        print("{} OOM".format(dataset))
-        return
-    except BaseException as e:
-        print(e)
-        raise
+        net_pyg.eval()
+        with torch.no_grad():
+            bench(net=net_pyg, net_params=(features, adj),
+                  tag="PyG-primitives", nvprof=False, steps=steps, memory=True, log=log)
+        del u, v, adj, net_pyg
 
-    net.eval()
-    net_dgl.eval()
-    net_pyg.eval()
-    with torch.no_grad():
-        steps = 1000
-        bench(net=net_dgl, net_params=(g, features),
-              tag="DGL-primitives", nvprof=False, steps=steps, memory=True, log=log)
-        bench(net=net_pyg, net_params=(features, adj),
-              tag="PyG-primitives", nvprof=False, steps=steps, memory=True, log=log)
-        compile_res = bench(net=net, net_params=(
-            g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
-        res = bench(net=net, net_params=(g, features, False),
-                    tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
-        check_equal(compile_res, res)
+    def run_dgl(g, features):
+        g = g.to(device)
+        net_dgl = GAT_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+                          out_dim=DEFAULT_DIM).to(device)
+        net_dgl.eval()
+        with torch.no_grad():
+            bench(net=net_dgl, net_params=(g, features),
+                  tag="DGL-primitives", nvprof=False, steps=steps, memory=True, log=log)
+        del g, net_dgl
+
+    run_baseline_graphiler(g, features)
+    run_pyg(g, features)
+    run_dgl(g, features)
 
     return log
 
