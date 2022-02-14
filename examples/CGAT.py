@@ -5,7 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM
+from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM, init_df
 device = setup()
 
 
@@ -66,7 +66,7 @@ class CGAT(nn.Module):
         return h
 
 
-def profile(dataset, feat_dim):
+def profile(dataset, feat_dim, prof_df=None):
     g, features = load_data(dataset, feat_dim)
     g, features = g.to(device), features.to(device)
 
@@ -76,9 +76,9 @@ def profile(dataset, feat_dim):
     net.eval()
     with torch.no_grad():
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="compile", nvprof=False)
+            g, features, True), tag="compile", nvprof=False, prof_df=prof_df)
         res = bench(net=net, net_params=(g, features, False),
-                    tag="naive", nvprof=False)
+                    tag="naive", nvprof=False, prof_df=prof_df)
         check_equal(compile_res, res)
 
 
@@ -87,7 +87,9 @@ if __name__ == "__main__":
         print("usage: python ConstrainedGAT.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
+        df = init_df(homo_dataset, ["compile", "naive"], ["time", "mem"])
         for d in homo_dataset:
-            profile(d, homo_dataset[d])
+            profile(d, homo_dataset[d], df[d])
+        df.to_pickle("./res.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]))

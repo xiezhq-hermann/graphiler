@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM
+from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM, init_df
 
 import dgl.function as fn
 from dgl.nn.functional import edge_softmax
@@ -165,7 +165,7 @@ class HGT(nn.Module):
         return g.ndata.pop('h')
 
 
-def profile(dataset, feat_dim):
+def profile(dataset, feat_dim, prof_df=None):
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
     g, features = g.to(device), features.to(device)
@@ -202,18 +202,18 @@ def profile(dataset, feat_dim):
     with torch.no_grad():
         steps = 1000
         bench(net=net_pyg_slice, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
-              tag="PyG-slice", nvprof=False, steps=steps, memory=True)
+              tag="PyG-slice", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         bench(net=net_hetero, net_params=(g_hetero, g_hetero.ndata['h']),
-              tag="DGL-slice", nvprof=False, steps=steps, memory=True)
+              tag="DGL-slice", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         compile_res = bench(net=net, net_params=(
-            g, features, "compile"), tag="Graphiler", nvprof=False, steps=steps, memory=True)
+            g, features, "compile"), tag="Graphiler", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         bench(net=net_pyg_bmm, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
-              tag="PyG-bmm", nvprof=False, steps=steps, memory=True)
+              tag="PyG-bmm", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         res = bench(net=net, net_params=(
-            g, features, "batch"), tag="DGL-bmm", nvprof=False, steps=steps, memory=True)
+            g, features, "batch"), tag="DGL-bmm", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         check_equal(compile_res, res)
         bench(net=net, net_params=(g, features, "naive"),
-              tag="DGL-UDF", nvprof=False, steps=steps, memory=True)
+              tag="DGL-UDF", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
 
 
 if __name__ == '__main__':
@@ -221,7 +221,10 @@ if __name__ == '__main__':
         print("usage: python HGT.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
+        df = init_df(hetero_dataset, ["PyG-slice", "DGL-slice",
+                     "Graphiler", "PyG-bmm", "DGL-bmm", "DGL-UDF"], ["time", "mem"])
         for d in hetero_dataset:
-            profile(d, DEFAULT_DIM)
+            profile(d, DEFAULT_DIM, df[d])
+        df.to_pickle("./res.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]))

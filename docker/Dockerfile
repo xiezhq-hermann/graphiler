@@ -18,7 +18,7 @@ RUN wget -q -P /tmp \
 ENV PATH="/opt/conda/bin:$PATH"
 RUN pip install torch==1.8.2+cu111 -f https://download.pytorch.org/whl/lts/1.8/torch_lts.html\
     && pip install dgl-cu111==0.6.1\
-       torch-scatter torch-sparse torch-cluster torch-spline-conv -f https://data.pyg.org/whl/torch-1.8.0+cu111.html\
+       torch-scatter==2.0.8 torch-sparse==0.6.12 torch-cluster==1.5.9 torch-spline-conv==1.2.1 -f https://data.pyg.org/whl/torch-1.8.0+cu111.html\
     && pip install torch-geometric==2.0.1\
     && pip install ogb==1.3.2
 

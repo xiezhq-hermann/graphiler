@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM
+from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM, init_df
 
 from RGCN_DGL import RGCN_DGL, RGCN_DGL_hetero
 from RGCN_PyG import RGCN_PyG
@@ -68,7 +68,7 @@ class RGCN(nn.Module):
         return x
 
 
-def profile(dataset, feat_dim):
+def profile(dataset, feat_dim, prof_df=None):
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
     g, features = g.to(device), features.to(device)
@@ -106,15 +106,15 @@ def profile(dataset, feat_dim):
         bench(net=net_pyg_slice, net_params=(adj, features, edge_type),
               tag="PyG-slice", nvprof=False, steps=steps, memory=True)
         bench(net=net_dgl_hetero, net_params=(
-            g_hetero, g_hetero.ndata['h']), tag="DGL-slice", nvprof=False, steps=steps, memory=True)
+            g_hetero, g_hetero.ndata['h']), tag="DGL-slice", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         compile_res = bench(net=net, net_params=(
-            g, features, norm, True), tag="Graphiler", nvprof=False, steps=steps, memory=True)
+            g, features, norm, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         bench(net=net_pyg_bmm, net_params=(adj, features, edge_type),
-              tag="PyG-bmm", nvprof=False, steps=steps, memory=True)
+              tag="PyG-bmm", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         bench(net=net_dgl, net_params=(
-            g, features, g.edata['_TYPE'], norm), tag="DGL-bmm", nvprof=False, steps=steps, memory=True)
+            g, features, g.edata['_TYPE'], norm), tag="DGL-bmm", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         res = bench(net=net, net_params=(g, features, norm, False),
-                    tag="DGL-UDF", nvprof=False, steps=steps, memory=True)
+                    tag="DGL-UDF", nvprof=False, steps=steps, memory=True, prof_df=prof_df)
         check_equal(compile_res, res)
 
 
@@ -123,7 +123,10 @@ if __name__ == '__main__':
         print("usage: python GCN.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
+        df = init_df(hetero_dataset, ["PyG-slice", "DGL-slice",
+                     "Graphiler", "PyG-bmm", "DGL-bmm", "DGL-UDF"], ["time", "mem"])
         for d in hetero_dataset:
-            profile(d, RGCN_FEAT_DIM)
+            profile(d, RGCN_FEAT_DIM, df[d])
+        df.to_pickle("./res.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]))

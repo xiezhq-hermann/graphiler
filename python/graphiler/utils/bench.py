@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import pandas as pd
 
 from torch.cuda import profiler, synchronize, max_memory_allocated, reset_peak_memory_stats
 
@@ -10,7 +11,7 @@ def check_equal(first, second):
     print("corectness check passed!")
 
 
-def bench(net, net_params, tag="", nvprof=False, memory=False, steps=1001):
+def bench(net, net_params, tag="", nvprof=False, memory=False, steps=1001, prof_df=None):
     # warm up
     for i in range(5):
         net(*net_params)
@@ -24,9 +25,21 @@ def bench(net, net_params, tag="", nvprof=False, memory=False, steps=1001):
     synchronize()
     if nvprof:
         profiler.stop()
-    print("{} elapsed time: {} ms/infer".format(tag,
-          (time.time() - start_time) / steps * 1000))
+    elapsed_time = (time.time() - start_time) / steps * 1000
+    print("{} elapsed time: {} ms/infer".format(tag, elapsed_time))
+    if prof_df is not None:
+        prof_df[tag, "elapsed_time"] = elapsed_time 
     if memory:
-        print("max memory consumption: {} MB".format(
-            max_memory_allocated()/1048576))
+        max_mem_consumption = max_memory_allocated() / 1048576
+        print("max memory consumption: {} MB".format(max_mem_consumption))
+        prof_df[tag, "mem"] = max_mem_consumption
     return logits
+
+
+def init_df(datasets, tags, metrics):
+    index = pd.MultiIndex.from_product(
+        [datasets, tags, metrics],
+        names=["datasets", "tag", "metric"]
+    )
+    return pd.Series(np.zeros(len(datasets), len(tags), len(metrics)), index=index)
+ 
