@@ -13,12 +13,12 @@ def check_equal(first, second):
 
 
 def bench(net, net_params, tag="", nvprof=False, memory=False, repeat=1000, log=None):
-    # warm up
-    for i in range(5):
-        net(*net_params)
-    synchronize()
-    reset_peak_memory_stats()
     try:
+        # warm up
+        for i in range(5):
+            net(*net_params)
+        synchronize()
+        reset_peak_memory_stats()
         if nvprof:
             profiler.start()
         start_time = time.time()
