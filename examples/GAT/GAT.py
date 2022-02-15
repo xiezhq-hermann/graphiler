@@ -24,8 +24,7 @@ def message_func(edges: EdgeBatchDummy, fc_weight, attn_weight):
     z_d = torch.mm(edges.dst['h'], fc_weight)
     z2 = torch.cat([z_s, z_d], dim=1)
     a = torch.mm(z2, attn_weight)
-    # Todo: F.leaky_relu
-    return {'z': z_s, 'e': torch.relu(a)}
+    return {'z': z_s, 'e': F.leaky_relu_(a)}
 
 
 def reduce_func(nodes: NodeBatchDummy):
@@ -74,7 +73,8 @@ class GAT(nn.Module):
 
 
 def profile(dataset, feat_dim, repeat=1000):
-    log = init_log(['DGL-primitives', 'PyG-primitives', 'Graphiler', 'DGL-UDF'], ['time', 'mem'])
+    log = init_log(['DGL-primitives', 'PyG-primitives',
+                   'Graphiler', 'DGL-UDF'], ['time', 'mem'])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
     features = features.to(device)
@@ -122,7 +122,7 @@ def profile(dataset, feat_dim, repeat=1000):
 
 
 if __name__ == '__main__':
-    repeat = int(os.environ.get('REPEAT', 1000))
+    repeat = int(os.environ.get('REPEAT', 50))
     if len(sys.argv) != 3:
         print("usage: python GAT.py [dataset] [feat_dim]")
         exit()

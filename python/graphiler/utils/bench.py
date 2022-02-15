@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 from dgl import DGLError
-from torch.cuda import profiler, synchronize, max_memory_allocated, reset_peak_memory_stats
+from torch.cuda import profiler, synchronize, memory_allocated, max_memory_allocated, reset_peak_memory_stats
 
 
 def check_equal(first, second):
@@ -21,6 +21,7 @@ def bench(net, net_params, tag="", nvprof=False, memory=False, repeat=1000, log=
         for i in range(5):
             net(*net_params)
         synchronize()
+        memory_offset = memory_allocated()
         reset_peak_memory_stats()
         if nvprof:
             profiler.start()
@@ -32,10 +33,11 @@ def bench(net, net_params, tag="", nvprof=False, memory=False, repeat=1000, log=
             profiler.stop()
         elapsed_time = (time.time() - start_time) / repeat * 1000
         print("{} elapsed time: {} ms/infer".format(tag, elapsed_time))
-        log.at[tag, "time"] = elapsed_time 
+        log.at[tag, "time"] = elapsed_time
         if memory:
-            max_mem_consumption = max_memory_allocated() / 1048576
-            print("max memory consumption: {} MB".format(max_mem_consumption))
+            max_mem_consumption = (
+                max_memory_allocated() - memory_offset) / 1048576
+            print("intermediate data memory usage: {} MB".format(max_mem_consumption))
             log.at[tag, "mem"] = max_mem_consumption
     except (RuntimeError, DGLError):
         print("{} OOM".format(tag))
@@ -52,4 +54,3 @@ def init_log(tags, metrics):
         names=["tag", "metric"]
     )
     return pd.Series(np.zeros((len(tags)*len(metrics),)), index=index)
- 

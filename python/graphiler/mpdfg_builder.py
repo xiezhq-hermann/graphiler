@@ -61,12 +61,12 @@ def mpdfg_builder(msg_func, reduce_func, update_func=None, opt_level=2):
     reduce_func = torch.jit.script(reduce_func).inlined_graph
     update_func = torch.jit.script(
         update_func).inlined_graph if update_func else None
-    builder(mpdfg.annotations, msg_func, reduce_func, update_func)
 
     print(msg_func)
     print(reduce_func)
     print(update_func)
 
+    builder(mpdfg.annotations, msg_func, reduce_func, update_func)
     optimizer(mpdfg.annotations, opt_level)
     print(mpdfg.forward.graph)
 

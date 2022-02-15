@@ -241,7 +241,7 @@ def profile(dataset, feat_dim, repeat=1000):
 
 
 if __name__ == '__main__':
-    repeat = int(os.environ.get('REPEAT', 1000))
+    repeat = int(os.environ.get('REPEAT', 50))
     if len(sys.argv) != 3:
         print("usage: python HGT.py [dataset] [feat_dim]")
         exit()
