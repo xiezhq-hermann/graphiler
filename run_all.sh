@@ -2,5 +2,5 @@
 for model in GAT GCN HGT RGCN
 do
   python examples/${model}/${model}.py all 0
-  ./visualize ${model}
+  ./visualize.sh ${model}
 done
