@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git-all\
     cmake\
     gnuplot\
+    ghostscript\
     texlive-font-utils\
     && rm -rf /var/lib/apt/lists/*
 
@@ -33,7 +34,7 @@ WORKDIR /root/graphiler
 RUN mkdir -p /root/.dgl
 RUN mkdir build \
   && cd build \
-  && cmake -DCMAKE_PREFIX_PATH="$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')" .. \
+  && cmake -DPYTHON_EXECUTABLE:FILEPATH="/opt/conda/bin/python" -DCMAKE_PREFIX_PATH="$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')" .. \
   && make -j \
   && mv libgraphiler.so /root/.dgl \
   && cd .. \
