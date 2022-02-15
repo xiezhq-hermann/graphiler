@@ -20,6 +20,7 @@ python setup.py install
 python examples/GAT/GAT.py all 0
 
 # run all experiments and visualize results
+export REPEAT=50  # manually specify the number of repeats, you can change it to whatever you want.
 ./run_all.sh
 ```
 
@@ -33,8 +34,23 @@ Install docker and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter
 
 ## Build and run
 
+You can choose to build the image from scratch.
+
 ```
 docker build -f docker/Dockerfile -t graphiler .
+```
+
+Or direct pull an pre-built image from docker hub:
+
+```
+docker pull expye/graphiler-ae:v0.1
+docker tag expye/graphiler-ae:v0.1 graphiler
+```
+
+## Run experiments
+
+```
 docker run --gpus all -i -t graphiler /bin/bash run_all.sh
 ```
 
+Note: The number of repeats in docker was set to `50` by default.

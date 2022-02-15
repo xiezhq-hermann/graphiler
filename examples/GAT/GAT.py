@@ -9,7 +9,7 @@ import pandas as pd
 from torch_sparse import SparseTensor
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM, init_log
+from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM, init_log, empty_cache
 
 from GAT_DGL import GAT_DGL
 from GAT_PyG import GAT_PyG
@@ -79,6 +79,7 @@ def profile(dataset, feat_dim, repeat=1000):
     g, features = load_data(dataset, feat_dim)
     features = features.to(device)
 
+    @empty_cache
     def run_baseline_graphiler(g, features):
         g = g.to(device)
         net = GAT(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
@@ -92,6 +93,7 @@ def profile(dataset, feat_dim, repeat=1000):
             check_equal(compile_res, res)
         del g, net, compile_res, res
 
+    @empty_cache
     def run_pyg(g, features):
         u, v = g.edges()
         adj = SparseTensor(row=u, col=v, sparse_sizes=(
@@ -104,6 +106,7 @@ def profile(dataset, feat_dim, repeat=1000):
                   tag="PyG-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
         del u, v, adj, net_pyg
 
+    @empty_cache
     def run_dgl(g, features):
         g = g.to(device)
         net_dgl = GAT_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,

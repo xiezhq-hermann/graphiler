@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import pandas as pd
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM, init_log
+from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM, init_log, empty_cache
 
 from RGCN_DGL import RGCN_DGL, RGCN_DGL_hetero
 from RGCN_PyG import RGCN_PyG
@@ -78,6 +78,7 @@ def profile(dataset, feat_dim, repeat=1000):
     g_hetero, _ = load_data(dataset, feat_dim, to_homo=False)
     features = features.to(device)
 
+    @empty_cache
     def run_baseline_graphiler(g, features):
         g = g.to(device)
         norm = torch.rand(g.num_edges(), 1).to(device)
@@ -92,6 +93,7 @@ def profile(dataset, feat_dim, repeat=1000):
             check_equal(compile_res, res)
         del g, norm, net, compile_res, res
 
+    @empty_cache
     def run_dgl_hetero(g_hetero, features):
         g_hetero = g_hetero.to(device)
         rel_names = list(set(g_hetero.etypes))
@@ -103,6 +105,7 @@ def profile(dataset, feat_dim, repeat=1000):
                 g_hetero, g_hetero.ndata['h']), tag="DGL-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del g_hetero, rel_names, net_dgl_hetero
 
+    @empty_cache
     def run_pyg_bmm(g, features):
         edge_type = g.edata['_TYPE']
         u, v = g.edges()
@@ -115,6 +118,7 @@ def profile(dataset, feat_dim, repeat=1000):
                   tag="PyG-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
         del edge_type, u, v, adj, net_pyg_bmm
 
+    @empty_cache
     def run_dgl_bmm(g, features):
         g = g.to(device)
         norm = torch.rand(g.num_edges(), 1).to(device)
@@ -126,6 +130,7 @@ def profile(dataset, feat_dim, repeat=1000):
                 g, features, g.edata['_TYPE'], norm), tag="DGL-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
         del g, norm, net_dgl
 
+    @empty_cache
     def run_pyg_slice(g, features):
         edge_type = g.edata['_TYPE']
         u, v = g.edges()

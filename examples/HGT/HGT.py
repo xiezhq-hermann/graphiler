@@ -7,7 +7,7 @@ import torch.nn as nn
 import pandas as pd
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM, init_log
+from graphiler.utils import load_data, setup, check_equal, bench, hetero_dataset, DEFAULT_DIM, init_log, empty_cache
 
 import dgl.function as fn
 from dgl.nn.functional import edge_softmax
@@ -175,6 +175,7 @@ def profile(dataset, feat_dim, repeat=1000):
     g_hetero, _ = load_data(dataset, feat_dim, to_homo=False)
     features = features.to(device)
 
+    @empty_cache
     def run_baseline_graphiler(g, features):
         g = g.to(device)
         net = HGT(feat_dim, DEFAULT_DIM,
@@ -190,6 +191,7 @@ def profile(dataset, feat_dim, repeat=1000):
                   tag="DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
         del g, net, compile_res, res
 
+    @empty_cache
     def run_dgl_slice(g_hetero, features):
         g_hetero = g_hetero.to(device)
         node_dict = {}
@@ -206,6 +208,7 @@ def profile(dataset, feat_dim, repeat=1000):
                   tag="DGL-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del g_hetero, node_dict, edge_dict, net_hetero
 
+    @empty_cache
     def run_pyg_slice(g, features):
         u, v = g.edges()
         adj = torch.stack([u, v]).to(device)
@@ -219,6 +222,7 @@ def profile(dataset, feat_dim, repeat=1000):
                   tag="PyG-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del u, v, adj, src_type, dst_type, net_pyg_slice
 
+    @empty_cache
     def run_pyg_bmm(g, features):
         u, v = g.edges()
         adj = torch.stack([u, v]).to(device)

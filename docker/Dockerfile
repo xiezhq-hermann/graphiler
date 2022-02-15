@@ -40,3 +40,4 @@ RUN mkdir build \
   && cd .. \
   && python setup.py install
 ENV DGLBACKEND pytorch
+ENV REPEAT 50

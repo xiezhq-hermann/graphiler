@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch_sparse import SparseTensor
 
 from graphiler import EdgeBatchDummy, NodeBatchDummy, mpdfg_builder, update_all
-from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM, init_log
+from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, DEFAULT_DIM, init_log, empty_cache
 
 from GCN_DGL import GCN_DGL
 from GCN_PyG import GCN_PyG
@@ -64,6 +64,7 @@ def profile(dataset, feat_dim, repeat=1000):
     g, features = load_data(dataset, feat_dim)
     features = features.to(device)
 
+    @empty_cache
     def run_baseline_and_graphiler(g, features):
         g = g.to(device)
         net = GCN(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
@@ -77,6 +78,7 @@ def profile(dataset, feat_dim, repeat=1000):
             check_equal(compile_res, res)
         del g, net, compile_res, res
 
+    @empty_cache
     def run_pyg(g, features):
         u, v = g.edges()
         adj = SparseTensor(row=u, col=v, sparse_sizes=(
@@ -89,6 +91,7 @@ def profile(dataset, feat_dim, repeat=1000):
                   tag="PyG-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
         return u, v, adj, net_pyg
 
+    @empty_cache
     def run_dgl(g, features):
         g = g.to(device)
         net_dgl = GCN_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
