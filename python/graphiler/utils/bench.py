@@ -7,9 +7,11 @@ from torch.cuda import profiler, synchronize, max_memory_allocated, reset_peak_m
 
 
 def check_equal(first, second):
+    if first is None or second is None:
+        print("cannot guarantee correctness because of OOM")
     np.testing.assert_allclose(first.cpu().detach(
     ).numpy(), second.cpu().detach().numpy(), rtol=1e-3)
-    print("corectness check passed!")
+    print("correctness check passed!")
 
 
 def bench(net, net_params, tag="", nvprof=False, memory=False, repeat=1000, log=None):
