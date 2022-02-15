@@ -1,5 +1,5 @@
 import sys
-
+import os
 import torch
 import torch.nn as nn
 import pandas as pd
@@ -57,7 +57,7 @@ class GCN(nn.Module):
         return x
 
 
-def profile(dataset, feat_dim, steps=1000):
+def profile(dataset, feat_dim, repeat=1000):
     log = init_log(["DGL-primitives", "PyG-primitives",
                     "Graphiler", "DGL-UDF"], ["time", "mem"])
     print("benchmarking on: " + dataset)
@@ -67,13 +67,13 @@ def profile(dataset, feat_dim, steps=1000):
     def run_baseline_and_graphiler(g, features):
         g = g.to(device)
         net = GCN(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-                out_dim=DEFAULT_DIM).to(device)
+                  out_dim=DEFAULT_DIM).to(device)
         net.eval()
         with torch.no_grad():
             compile_res = bench(net=net, net_params=(
-                g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
+                g, features, True), tag="Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
             res = bench(net=net, net_params=(g, features, False),
-                        tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
+                        tag="DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
             check_equal(compile_res, res)
         del g, net, compile_res, res
 
@@ -82,22 +82,22 @@ def profile(dataset, feat_dim, steps=1000):
         adj = SparseTensor(row=u, col=v, sparse_sizes=(
             g.num_src_nodes(), g.num_dst_nodes())).to(device)
         net_pyg = GCN_PyG(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-                        out_dim=DEFAULT_DIM).to(device)
+                          out_dim=DEFAULT_DIM).to(device)
         net_pyg.eval()
         with torch.no_grad():
             bench(net=net_pyg, net_params=(features, adj),
-                tag="PyG-primitives", nvprof=False, steps=steps, memory=True, log=log)
+                  tag="PyG-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
         return u, v, adj, net_pyg
-    
+
     def run_dgl(g, features):
         g = g.to(device)
         net_dgl = GCN_DGL(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
-                        out_dim=DEFAULT_DIM).to(device)
+                          out_dim=DEFAULT_DIM).to(device)
         net_dgl.eval()
         with torch.no_grad():
             bench(net=net_dgl, net_params=(g, features),
-                tag="DGL-primitives", nvprof=False, steps=steps, memory=True, log=log)
-    
+                  tag="DGL-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
+
     run_baseline_and_graphiler(g, features)
     run_pyg(g, features)
     run_dgl(g, features)
@@ -106,13 +106,14 @@ def profile(dataset, feat_dim, steps=1000):
 
 
 if __name__ == '__main__':
+    repeat = int(os.environ.get('REPEAT', 1000))
     if len(sys.argv) != 3:
         print("usage: python GCN.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
         log = {}
         for d in homo_dataset:
-            log[d] = profile(d, homo_dataset[d])
+            log[d] = profile(d, homo_dataset[d], repeat)
         pd.DataFrame(log).to_pickle("./GCN.pkl")
     else:
-        profile(sys.argv[1], int(sys.argv[2]))
+        profile(sys.argv[1], int(sys.argv[2]), repeat)

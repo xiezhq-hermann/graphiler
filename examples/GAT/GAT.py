@@ -1,4 +1,5 @@
 import sys
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -72,7 +73,7 @@ class GAT(nn.Module):
         return h
 
 
-def profile(dataset, feat_dim, steps=1000):
+def profile(dataset, feat_dim, repeat=1000):
     log = init_log(['DGL-primitives', 'PyG-primitives', 'Graphiler', 'DGL-UDF'], ['time', 'mem'])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim)
@@ -85,9 +86,9 @@ def profile(dataset, feat_dim, steps=1000):
         net.eval()
         with torch.no_grad():
             compile_res = bench(net=net, net_params=(
-                g, features, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
+                g, features, True), tag="Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
             res = bench(net=net, net_params=(g, features, False),
-                        tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
+                        tag="DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
             check_equal(compile_res, res)
         del g, net, compile_res, res
 
@@ -100,7 +101,7 @@ def profile(dataset, feat_dim, steps=1000):
         net_pyg.eval()
         with torch.no_grad():
             bench(net=net_pyg, net_params=(features, adj),
-                  tag="PyG-primitives", nvprof=False, steps=steps, memory=True, log=log)
+                  tag="PyG-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
         del u, v, adj, net_pyg
 
     def run_dgl(g, features):
@@ -110,7 +111,7 @@ def profile(dataset, feat_dim, steps=1000):
         net_dgl.eval()
         with torch.no_grad():
             bench(net=net_dgl, net_params=(g, features),
-                  tag="DGL-primitives", nvprof=False, steps=steps, memory=True, log=log)
+                  tag="DGL-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
         del g, net_dgl
 
     run_baseline_graphiler(g, features)
@@ -121,13 +122,14 @@ def profile(dataset, feat_dim, steps=1000):
 
 
 if __name__ == '__main__':
+    repeat = int(os.environ.get('REPEAT', 1000))
     if len(sys.argv) != 3:
         print("usage: python GAT.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
         log = {}
         for d in homo_dataset:
-            log[d] = profile(d, homo_dataset[d])
+            log[d] = profile(d, homo_dataset[d], repeat)
         pd.DataFrame(log).to_pickle("./GAT.pkl")
     else:
-        profile(sys.argv[1], int(sys.argv[2]))
+        profile(sys.argv[1], int(sys.argv[2]), repeat)

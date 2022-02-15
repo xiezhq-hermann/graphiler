@@ -1,4 +1,5 @@
 import sys
+import os
 
 import torch
 import pandas as pd
@@ -10,6 +11,8 @@ from graphiler.utils import load_data, setup, check_equal, bench, homo_dataset, 
 device = setup()
 
 # Todo: hyper message residency?
+
+
 def message_func(edges: EdgeBatchDummy, fc_weight, attn_weight):
     z_s = torch.mm(edges.src['h'], fc_weight)
     z_d = torch.mm(edges.dst['h'], fc_weight)
@@ -66,8 +69,8 @@ class CGAT(nn.Module):
         return h
 
 
-def profile(dataset, feat_dim):
-    log = init_log(homo_dataset, ["compile", "naive"], ["time", "mem"])
+def profile(dataset, feat_dim, repeat=1000):
+    log = init_log(["compile", "naive"], ["time", "mem"])
     g, features = load_data(dataset, feat_dim)
     g, features = g.to(device), features.to(device)
 
@@ -77,20 +80,23 @@ def profile(dataset, feat_dim):
     net.eval()
     with torch.no_grad():
         compile_res = bench(net=net, net_params=(
-            g, features, True), tag="compile", nvprof=False, log=log)
+            g, features, True), tag="compile", nvprof=False, repeat=repeat, log=log)
         res = bench(net=net, net_params=(g, features, False),
-                    tag="naive", nvprof=False, log=log)
+                    tag="naive", nvprof=False, repeat=repeat, log=log)
         check_equal(compile_res, res)
+
+    return log
 
 
 if __name__ == "__main__":
+    repeat = int(os.environ.get('REPEAT', 1000))
     if len(sys.argv) != 3:
         print("usage: python ConstrainedGAT.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
         log = {}
         for d in homo_dataset:
-            log[d] = profile(d, homo_dataset[d], log)
+            log[d] = profile(d, homo_dataset[d], log, repeat)
         pd.DataFrame(log).to_pickle("./CGAT.pkl")
     else:
-        profile(sys.argv[1], int(sys.argv[2]))
+        profile(sys.argv[1], int(sys.argv[2]), repeat)

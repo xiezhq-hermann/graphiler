@@ -7,27 +7,30 @@ from torch.cuda import profiler, synchronize, max_memory_allocated, reset_peak_m
 
 
 def check_equal(first, second):
-    np.testing.assert_allclose(first.cpu().detach(
-    ).numpy(), second.cpu().detach().numpy(), rtol=1e-3)
-    print("corectness check passed!")
+    if first is None or second is None:
+        print("cannot guarantee correctness because of OOM")
+    else:
+        np.testing.assert_allclose(first.cpu().detach(
+        ).numpy(), second.cpu().detach().numpy(), rtol=1e-3)
+        print("correctness check passed!")
 
 
-def bench(net, net_params, tag="", nvprof=False, memory=False, steps=1001, log=None):
-    # warm up
-    for i in range(5):
-        net(*net_params)
-    synchronize()
-    reset_peak_memory_stats()
+def bench(net, net_params, tag="", nvprof=False, memory=False, repeat=1000, log=None):
     try:
+        # warm up
+        for i in range(5):
+            net(*net_params)
+        synchronize()
+        reset_peak_memory_stats()
         if nvprof:
             profiler.start()
         start_time = time.time()
-        for i in range(steps):
+        for i in range(repeat):
             logits = net(*net_params)
         synchronize()
         if nvprof:
             profiler.stop()
-        elapsed_time = (time.time() - start_time) / steps * 1000
+        elapsed_time = (time.time() - start_time) / repeat * 1000
         print("{} elapsed time: {} ms/infer".format(tag, elapsed_time))
         log.at[tag, "time"] = elapsed_time 
         if memory:

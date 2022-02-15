@@ -1,5 +1,3 @@
-for model in GAT GCN HGT RGCN CGAT
-do
-  python scripts/plot.py --model ${model} --time
-  python scripts/plot.py --model ${model} --mem
-done
+#!/bin/bash
+python scripts/plot.py --model $1 --time
+python scripts/plot.py --model $1 --mem

@@ -1,5 +1,6 @@
 import sys
-
+import os
+from timeit import repeat
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -69,7 +70,7 @@ class RGCN(nn.Module):
         return x
 
 
-def profile(dataset, feat_dim, steps=1000):
+def profile(dataset, feat_dim, repeat=1000):
     log = init_log(["PyG-slice", "DGL-slice",
                     "Graphiler", "PyG-bmm", "DGL-bmm", "DGL-UDF"], ["time", "mem"])
     print("benchmarking on: " + dataset)
@@ -85,9 +86,9 @@ def profile(dataset, feat_dim, steps=1000):
         net.eval()
         with torch.no_grad():
             compile_res = bench(net=net, net_params=(
-                g, features, norm, True), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
+                g, features, norm, True), tag="Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
             res = bench(net=net, net_params=(g, features, norm, False),
-                        tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
+                        tag="DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
             check_equal(compile_res, res)
         del g, norm, net, compile_res, res
 
@@ -99,7 +100,7 @@ def profile(dataset, feat_dim, steps=1000):
         net_dgl_hetero.eval()
         with torch.no_grad():
             bench(net=net_dgl_hetero, net_params=(
-                g_hetero, g_hetero.ndata['h']), tag="DGL-slice", nvprof=False, steps=steps, memory=True, log=log)
+                g_hetero, g_hetero.ndata['h']), tag="DGL-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del g_hetero, rel_names, net_dgl_hetero
 
     def run_pyg_bmm(g, features):
@@ -111,7 +112,7 @@ def profile(dataset, feat_dim, steps=1000):
         net_pyg_bmm.eval()
         with torch.no_grad():
             bench(net=net_pyg_bmm, net_params=(adj, features, edge_type),
-                  tag="PyG-bmm", nvprof=False, steps=steps, memory=True, log=log)
+                  tag="PyG-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
         del edge_type, u, v, adj, net_pyg_bmm
 
     def run_dgl_bmm(g, features):
@@ -122,7 +123,7 @@ def profile(dataset, feat_dim, steps=1000):
         net_dgl.eval()
         with torch.no_grad():
             bench(net=net_dgl, net_params=(
-                g, features, g.edata['_TYPE'], norm), tag="DGL-bmm", nvprof=False, steps=steps, memory=True, log=log)
+                g, features, g.edata['_TYPE'], norm), tag="DGL-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
         del g, norm, net_dgl
 
     def run_pyg_slice(g, features):
@@ -134,7 +135,7 @@ def profile(dataset, feat_dim, steps=1000):
         net_pyg_slice.eval()
         with torch.no_grad():
             bench(net=net_pyg_slice, net_params=(adj, features, edge_type),
-                  tag="PyG-slice", nvprof=False, steps=steps, memory=True, log=log)
+                  tag="PyG-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del edge_type, u, v, adj, net_pyg_slice
 
     run_baseline_graphiler(g, features)
@@ -147,13 +148,14 @@ def profile(dataset, feat_dim, steps=1000):
 
 
 if __name__ == '__main__':
+    repeat = int(os.environ.get('REPEAT', 1000))
     if len(sys.argv) != 3:
         print("usage: python GCN.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
         log = {}
         for d in hetero_dataset:
-            log[d] = profile(d, RGCN_FEAT_DIM)
+            log[d] = profile(d, RGCN_FEAT_DIM, repeat)
         pd.DataFrame(log).to_pickle("./RGCN.pkl")
     else:
-        profile(sys.argv[1], int(sys.argv[2]))
+        profile(sys.argv[1], int(sys.argv[2]), repeat)

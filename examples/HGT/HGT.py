@@ -1,4 +1,5 @@
 import sys
+import os
 import math
 
 import torch
@@ -166,7 +167,7 @@ class HGT(nn.Module):
         return g.ndata.pop('h')
 
 
-def profile(dataset, feat_dim, steps=1000):
+def profile(dataset, feat_dim, repeat=1000):
     log = init_log(["PyG-slice", "DGL-slice",
                     "Graphiler", "PyG-bmm", "DGL-bmm", "DGL-UDF"], ["time", "mem"])
     print("benchmarking on: " + dataset)
@@ -181,12 +182,12 @@ def profile(dataset, feat_dim, steps=1000):
         net.eval()
         with torch.no_grad():
             compile_res = bench(net=net, net_params=(
-                g, features, "compile"), tag="Graphiler", nvprof=False, steps=steps, memory=True, log=log)
+                g, features, "compile"), tag="Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
             res = bench(net=net, net_params=(
-                g, features, "batch"), tag="DGL-bmm", nvprof=False, steps=steps, memory=True, log=log)
+                g, features, "batch"), tag="DGL-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
             check_equal(compile_res, res)
             bench(net=net, net_params=(g, features, "naive"),
-                  tag="DGL-UDF", nvprof=False, steps=steps, memory=True, log=log)
+                  tag="DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
         del g, net, compile_res, res
 
     def run_dgl_slice(g_hetero, features):
@@ -202,7 +203,7 @@ def profile(dataset, feat_dim, steps=1000):
         net_hetero.eval()
         with torch.no_grad():
             bench(net=net_hetero, net_params=(g_hetero, g_hetero.ndata['h']),
-                  tag="DGL-slice", nvprof=False, steps=steps, memory=True, log=log)
+                  tag="DGL-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del g_hetero, node_dict, edge_dict, net_hetero
 
     def run_pyg_slice(g, features):
@@ -215,7 +216,7 @@ def profile(dataset, feat_dim, steps=1000):
         net_pyg_slice.eval()
         with torch.no_grad():
             bench(net=net_pyg_slice, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
-                  tag="PyG-slice", nvprof=False, steps=steps, memory=True, log=log)
+                  tag="PyG-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del u, v, adj, src_type, dst_type, net_pyg_slice
 
     def run_pyg_bmm(g, features):
@@ -228,7 +229,7 @@ def profile(dataset, feat_dim, steps=1000):
         net_pyg_bmm.eval()
         with torch.no_grad():
             bench(net=net_pyg_bmm, net_params=(adj, features, g.edata['_TYPE'].to(device), g.ndata['_TYPE'].to(device), src_type, dst_type),
-                  tag="PyG-bmm", nvprof=False, steps=steps, memory=True, log=log)
+                  tag="PyG-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
         del u, v, adj, src_type, dst_type, net_pyg_bmm
 
     run_baseline_graphiler(g, features)
@@ -240,13 +241,14 @@ def profile(dataset, feat_dim, steps=1000):
 
 
 if __name__ == '__main__':
+    repeat = int(os.environ.get('REPEAT', 1000))
     if len(sys.argv) != 3:
         print("usage: python HGT.py [dataset] [feat_dim]")
         exit()
     if sys.argv[1] == "all":
         log = {}
         for d in hetero_dataset:
-            log[d] = profile(d, DEFAULT_DIM)
+            log[d] = profile(d, DEFAULT_DIM, repeat)
         pd.DataFrame(log).to_pickle("./HGT.pkl")
     else:
-        profile(sys.argv[1], int(sys.argv[2]))
+        profile(sys.argv[1], int(sys.argv[2]), repeat)

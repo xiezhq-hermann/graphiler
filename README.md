@@ -18,6 +18,9 @@ python setup.py install
 
 # benchmark all GAT implementation on all datasets
 python examples/GAT/GAT.py all 0
+
+# run all experiments and visualize results
+./run_all.sh
 ```
 
 # Run within docker
@@ -32,6 +35,6 @@ Install docker and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter
 
 ```
 docker build -f docker/Dockerfile -t graphiler .
-docker run --gpus all -i -t graphiler python examples/GAT/GAT.py all 0
+docker run --gpus all -i -t graphiler /bin/bash run_all.sh
 ```
 
