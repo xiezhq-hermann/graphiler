@@ -8,7 +8,6 @@ int64_t get_feat_dim(torch::Tensor features) {
   return feat_dim;
 }
 
-// Todo: COO version
 inline torch::Tensor BroadcastBaseForward(torch::Tensor features, int num_nodes,
                                           int num_edges, torch::Tensor pointer,
                                           torch::Tensor indices) {

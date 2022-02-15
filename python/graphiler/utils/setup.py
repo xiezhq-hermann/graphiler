@@ -113,8 +113,7 @@ def load_data(name, feat_dim=DEFAULT_DIM, prepare=True, to_homo=True):
 
 
 def prepare_graph(g, ntype=None):
-    # Todo: integrate with dgl.graph
-    # Todo: long int, multiple devices
+    # Todo: integrate with dgl.graph, long int, multiple devices
 
     reduce_node_index = g.in_edges(g.nodes(ntype))[0]
     reduce_node_index = reduce_node_index.type(torch.IntTensor).cuda()
