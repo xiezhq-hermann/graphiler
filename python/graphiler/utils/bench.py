@@ -1,4 +1,5 @@
 import time
+import torch
 import numpy as np
 import pandas as pd
 
@@ -54,3 +55,10 @@ def init_log(tags, metrics):
         names=["tag", "metric"]
     )
     return pd.Series(np.zeros((len(tags)*len(metrics),)), index=index)
+
+
+def empty_cache(func):
+    def wrapper(*args, **kwargs):
+        torch.cuda.empty_cache()
+        func(*args, **kwargs)
+    return wrapper
