@@ -29,12 +29,11 @@ RUN pip install torch==1.8.2+cu111 -f https://download.pytorch.org/whl/lts/1.8/t
 # avoid docker from caching the git repo
 ADD https://api.github.com/repos/xiezhq-hermann/graphiler/git/refs/heads/main version.json
 RUN git clone -b main https://github.com/xiezhq-hermann/graphiler.git /root/graphiler
-ENV Torch_DIR /opt/conda/lib/python3.8/site-packages/torch/share/cmake/Torch
 WORKDIR /root/graphiler
 RUN mkdir -p /root/.dgl
 RUN mkdir build \
   && cd build \
-  && cmake .. \
+  && cmake -DCMAKE_PREFIX_PATH="$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')" .. \
   && make -j \
   && mv libgraphiler.so /root/.dgl \
   && cd .. \
