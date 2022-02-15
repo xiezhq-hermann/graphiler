@@ -41,3 +41,6 @@ RUN mkdir build \
   && python setup.py install
 ENV DGLBACKEND pytorch
 ENV REPEAT 50
+
+# prefetch dataset
+RUN python scripts/prefetch_dataset.py
