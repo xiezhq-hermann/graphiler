@@ -254,6 +254,6 @@ if __name__ == '__main__':
         log = {}
         for d in hetero_dataset:
             log[d] = profile(d, DEFAULT_DIM, repeat)
-        pd.DataFrame(log).to_pickle("./HGT.pkl")
+        pd.DataFrame(log).to_pickle("output/HGT.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]), repeat)

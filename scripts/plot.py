@@ -105,7 +105,7 @@ if __name__ == "__main__":
         metric = metrics[args.mem]
         filename = "_".join([args.model, metric])
 
-    log = pd.read_pickle("./{}.pkl".format(args.model))
+    log = pd.read_pickle("output/{}.pkl".format(args.model))
 
     with open("{}.plt".format(filename), "w") as f:
         f.write(gnuplot_str(metric, filename))
@@ -115,5 +115,6 @@ if __name__ == "__main__":
 
     subprocess.run(["gnuplot", "{}.plt".format(filename)])
     subprocess.run(["epstopdf", "{}.ps".format(filename)])
+    subprocess.run(["mv", "{}.pdf".format(filename), "output/{}.pdf".format(filename)])
     subprocess.run(["rm", "{}.plt".format(filename),
                    "{}.ps".format(filename), "{}.dat".format(filename)])

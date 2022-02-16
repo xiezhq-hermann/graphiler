@@ -44,3 +44,5 @@ ENV REPEAT 50
 
 # prefetch dataset
 RUN python scripts/prefetch_dataset.py
+# create output directory
+RUN mkdir -p output

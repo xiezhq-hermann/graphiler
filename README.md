@@ -16,8 +16,12 @@ mv libgraphiler.so ~/.dgl/
 cd ..
 python setup.py install
 
+# create directory storing outputs
+mkdir -p output
+
 # benchmark all GAT implementation on all datasets
 python examples/GAT/GAT.py all 0
+./visualize.sh GAT
 
 # run all experiments and visualize results
 export REPEAT=50  # manually specify the number of repeats, you can change it to whatever you want.
@@ -50,7 +54,7 @@ docker tag expye/graphiler-ae:v0.1 graphiler
 ## Run experiments
 
 ```
-docker run --gpus all -i -t graphiler /bin/bash ./run_all.sh
+docker run --gpus all -i -t -v $(pwd)/output:/root/graphiler/output graphiler ./run_all.sh
 ```
 
 Note: The number of repeats in docker was set to `50` by default.
