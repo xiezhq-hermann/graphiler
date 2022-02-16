@@ -3,7 +3,6 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 import pandas as pd
 
 from torch_sparse import SparseTensor
@@ -76,11 +75,12 @@ def profile(dataset, feat_dim, repeat=1000):
     log = init_log(['DGL-primitives', 'PyG-primitives',
                    'Graphiler', 'DGL-UDF'], ['time', 'mem'])
     print("benchmarking on: " + dataset)
-    g, features = load_data(dataset, feat_dim)
+    g, features = load_data(dataset, feat_dim, prepare=False)
     features = features.to(device)
 
     @empty_cache
     def run_baseline_graphiler(g, features):
+        g, _ = load_data(dataset, feat_dim, prepare=True)
         g = g.to(device)
         net = GAT(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
                   out_dim=DEFAULT_DIM).to(device)

@@ -171,12 +171,13 @@ def profile(dataset, feat_dim, repeat=1000):
     log = init_log(["PyG-slice", "DGL-slice",
                     "Graphiler", "PyG-bmm", "DGL-bmm", "DGL-UDF"], ["time", "mem"])
     print("benchmarking on: " + dataset)
-    g, features = load_data(dataset, feat_dim)
+    g, features = load_data(dataset, feat_dim, prepare=False)
     g_hetero, _ = load_data(dataset, feat_dim, to_homo=False)
     features = features.to(device)
 
     @empty_cache
     def run_baseline_graphiler(g, features):
+        g, _ = load_data(dataset, feat_dim, prepare=True)
         g = g.to(device)
         net = HGT(feat_dim, DEFAULT_DIM,
                   DEFAULT_DIM, g.num_ntypes, g.num_rels).to(device)
