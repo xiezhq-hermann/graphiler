@@ -117,6 +117,6 @@ if __name__ == '__main__':
         log = {}
         for d in homo_dataset:
             log[d] = profile(d, homo_dataset[d], repeat)
-        pd.DataFrame(log).to_pickle("./GCN.pkl")
+        pd.DataFrame(log).to_pickle("output/GCN.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]), repeat)
