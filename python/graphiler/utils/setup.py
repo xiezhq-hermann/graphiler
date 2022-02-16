@@ -85,30 +85,32 @@ def load_data(name, feat_dim=DEFAULT_DIM, prepare=True, to_homo=True):
 
     node_feats = torch.rand([g.number_of_nodes(), feat_dim])
 
-    if prepare:
-        if name in hetero_dataset:
-            g, type_pointers = prepare_hetero_graph_simplified(g, node_feats)
-            if to_homo:
-                g = prepare_graph(dgl.to_homogeneous(g))
-                g.DGLGraph.SetNtypePointer(type_pointers['ntype_node_pointer'])
-                g.DGLGraph.SetEtypePointer(type_pointers['etype_edge_pointer'])
+    if name in hetero_dataset:
+        g, type_pointers = prepare_hetero_graph_simplified(g, node_feats)
+        if to_homo:
+            g = dgl.to_homogeneous(g)
+            if prepare:
+                g = prepare_graph(g)
+                g.DGLGraph.SetNtypePointer(
+                    type_pointers['ntype_node_pointer'].cuda())
+                g.DGLGraph.SetEtypePointer(
+                    type_pointers['etype_edge_pointer'].cuda())
                 g.DGLGraph.SetNtypeCOO(
                     g.ndata['_TYPE'].type(torch.LongTensor).cuda())
                 g.DGLGraph.SetEtypeCOO(
                     g.edata['_TYPE'].type(torch.LongTensor).cuda())
 
-                g.num_ntypes = len(type_pointers['ntype_node_pointer']) - 1
-                # note #rels is different to #etypes in some cases
-                # for simplicity we use these two terms interchangeably
-                # and refer an edge type as (src_type, etype, dst_type)
-                # see DGL document for more information
-                g.num_rels = num_etypes = len(
-                    type_pointers['etype_edge_pointer']) - 1
-
-        else:
-            g = prepare_graph(g)
-        g.ntype_data = {}
-        g.etype_data = {}
+            g.num_ntypes = len(type_pointers['ntype_node_pointer']) - 1
+            # note #rels is different to #etypes in some cases
+            # for simplicity we use these two terms interchangeably
+            # and refer an edge type as (src_type, etype, dst_type)
+            # see DGL document for more information
+            g.num_rels = num_etypes = len(
+                type_pointers['etype_edge_pointer']) - 1
+    elif prepare:
+        g = prepare_graph(g)
+    g.ntype_data = {}
+    g.etype_data = {}
     return g, node_feats
 
 
@@ -150,15 +152,14 @@ def prepare_hetero_graph_simplified(g, features, nkey='h'):
     ntype_pointer = np.cumsum(
         [0] + [g.number_of_nodes(ntype) for ntype in g.ntypes])
     for ntype, i in ntype_id.items():
-        g.nodes[ntype].data[nkey] = features[ntype_pointer[i]
-            :ntype_pointer[i + 1]]
+        g.nodes[ntype].data[nkey] = features[ntype_pointer[i]:ntype_pointer[i + 1]]
 
     etype_pointer = [0]
     for etype in g.canonical_etypes:
         g_sub = g[etype]
         etype_pointer.append(etype_pointer[-1] + g_sub.num_edges())
 
-    return (g, {"ntype_node_pointer": torch.IntTensor(ntype_pointer).cuda(), "etype_edge_pointer": torch.IntTensor(etype_pointer).cuda()})
+    return (g, {"ntype_node_pointer": torch.IntTensor(ntype_pointer), "etype_edge_pointer": torch.IntTensor(etype_pointer)})
 
 
 def setup(device='cuda:0'):

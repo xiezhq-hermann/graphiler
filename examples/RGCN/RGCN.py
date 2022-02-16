@@ -74,12 +74,13 @@ def profile(dataset, feat_dim, repeat=1000):
     log = init_log(["PyG-slice", "DGL-slice",
                     "Graphiler", "PyG-bmm", "DGL-bmm", "DGL-UDF"], ["time", "mem"])
     print("benchmarking on: " + dataset)
-    g, features = load_data(dataset, feat_dim)
+    g, features = load_data(dataset, feat_dim, prepare=False)
     g_hetero, _ = load_data(dataset, feat_dim, to_homo=False)
     features = features.to(device)
 
     @empty_cache
     def run_baseline_graphiler(g, features):
+        g, _ = load_data(dataset, feat_dim, prepare=True)
         g = g.to(device)
         norm = torch.rand(g.num_edges(), 1).to(device)
         net = RGCN(feat_dim, DEFAULT_DIM,
