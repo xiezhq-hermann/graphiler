@@ -54,7 +54,7 @@ docker tag expye/graphiler-ae:v0.1 graphiler
 ## Run experiments
 
 ```
-docker run --gpus all -i -t graphiler -v output:/root/graphiler/output  ./run_all.sh
+docker run --gpus all -i -t -v $(pwd)/output:/root/graphiler/output graphiler ./run_all.sh
 ```
 
 Note: The number of repeats in docker was set to `50` by default.
