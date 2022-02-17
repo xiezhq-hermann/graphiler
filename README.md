@@ -1,13 +1,69 @@
 # Graphiler
+Graphiler is a compiler stack built on top of DGL and TorchScript which compiles GNNs defined using user-defined functions (UDFs) into efficient execution plans. 
+This allows creating high performance models while retaining the simplicity and expressiveness of the UDF interface.
 
-Reorganizing Graphiler for code release and artifact evaluation, still in construction so stay tuned!
+## Repo Structure
+``` bash
+Graphiler
+├── artifact                # scripts for running the artifact
+├── docker
+├── examples                # GNN models with different implementations
+│   ├── GAT
+│   ├── GCN
+│   ├── HGT
+│   └── RGCN
+├── include
+│   ├── dglgraph.h          # simplified Graph representation
+│   └── mpdfg.h             # message passing data flow graph
+├── python
+│   ├── graphiler           # python wrapper
+│   └── ...
+└── src                     # source codes
+    ├── builder             # MP-DFG builder
+    ├── dglgraph.cpp
+    ├── ops                 # graph primitives
+    │   ├── broadcast
+    │   ├── dgl_primitives
+    │   │   ├── sddmm.cu
+    │   │   ├── spmm.cu
+    │   │   └── ...
+    │   ├── segment_mm
+    │   └── segment_softmax
+    │   └── ...
+    ├── optimizer           # optimization passes
+    │   ├── dedup.cpp
+    │   ├── fusion.cpp
+    │   ├── optimizer.h
+    │   ├── reorder.cpp
+    │   └── split.cpp
+    │   └── ...
+    └── ...
+```
+## Build Graphiler and get started
+### Play with docker
+Docker is the easiest way to build the environment and reproduce the results. To make use of it, please make sure [docker](https://docs.docker.com/engine/install/) and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) are properly installed and configured.
 
-# Install and run
-
+You can either build the image by yourself:
+```
+docker build -f docker/Dockerfile -t graphiler .
+```
+Or directly pull an pre-built image from docker hub:
+```
+docker pull expye/graphiler-ae:latest
+docker tag expye/graphiler-ae:latest graphiler
+```
+To quickly verify the installation:
+```
+docker run --gpus all -i -t graphiler python examples/GAT/GAT.py pubmed 500
+```
+### Build from scratch
+You can follow these instructions to build Graphiler on your machine:
 ```bash
-pip install -r requirements.txt
+# To install CUDA 11.1:
+# https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html 
 git clone https://github.com/xiezhq-hermann/graphiler.git
 cd graphiler
+pip install -r requirements.txt # install PyTorch, DGL, PyG, etc
 mkdir build && cd build
 cmake -DCMAKE_PREFIX_PATH="$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)')" ..
 make
@@ -15,46 +71,12 @@ mkdir -p ~/.dgl
 mv libgraphiler.so ~/.dgl/
 cd ..
 python setup.py install
+# path used in scripts
+export GRAPHILER=$(pwd)
 
-# create directory storing outputs
-mkdir -p output
-
-# benchmark all GAT implementation on all datasets
-python examples/GAT/GAT.py all 0
-./visualize.sh GAT
-
-# run all experiments and visualize results
-export REPEAT=50  # manually specify the number of repeats, you can change it to whatever you want.
-./run_all.sh
+# quick sanity check
+python $GRAPHILER/examples/GAT/GAT.py pubmed 500
 ```
 
-# Run within docker
-
-The simplest way to reproduce the artifact is to use docker.
-
-## Setup
-
-Install docker and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
-
-## Build and run
-
-You can choose to build the image from scratch.
-
-```
-docker build -f docker/Dockerfile -t graphiler .
-```
-
-Or direct pull an pre-built image from docker hub:
-
-```
-docker pull expye/graphiler-ae:v0.1
-docker tag expye/graphiler-ae:v0.1 graphiler
-```
-
-## Run experiments
-
-```
-docker run --gpus all -i -t -v $(pwd)/output:/root/graphiler/output graphiler ./run_all.sh
-```
-
-Note: The number of repeats in docker was set to `50` by default.
+### Artifact Evaluation
+Please go `artifact` directory for more information.

@@ -41,8 +41,9 @@ RUN mkdir build \
   && python setup.py install
 ENV DGLBACKEND pytorch
 ENV REPEAT 50
+ENV GRAPHILER /root/graphiler
 
 # prefetch dataset
-RUN python scripts/prefetch_dataset.py
+RUN python artifact/prefetch_dataset.py
 # create output directory
 RUN mkdir -p output
