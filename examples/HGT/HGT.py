@@ -17,8 +17,14 @@ from HGT_PyG import HGT_PyG, get_ntype
 
 device = setup()
 
+BREAK_FLAG = 2
 
-# Todo: explanation on the interface difference
+
+# note: for heterogenous GNNs, instead of remaining compatible with DGL interface
+# we introduced a simplified interface which might be adopted in DGL in the future:
+# nodes.type['weight'], edges.srctype, edges.dsttype and edges.type
+# which are consistent to nodes.data['h'], edges.src, edges.dst and edge.data
+# v.s. weight[nodes.data['_TYPE']], edges.src['_TYPE'], edges.dst['_TYPE'] and edges.data['_TYPE']
 def message_func(edges: EdgeBatchDummy, sqrt_dk: float):
 
     k_weight = edges.srctype['k_weight']
@@ -55,6 +61,10 @@ def update_func(nodes: NodeBatchDummy):
 
 
 mpdfg = mpdfg_builder(message_func, reduce_func, update_func)
+mpdfg_compile = mpdfg_builder(
+    message_func, reduce_func, update_func, opt_level=0)
+mpdfg_plus_reorder = mpdfg_builder(
+    message_func, reduce_func, update_func, opt_level=1)
 
 
 class HGTLayer_simplified(nn.Module):
@@ -134,7 +144,12 @@ class HGTLayer_simplified(nn.Module):
         g.ntype_data['a_weight'] = self.a_weight
 
         if flag == "compile":
-            update_all(g, mpdfg, msg_params=(self.sqrt_dk,))
+            if BREAK_FLAG == 0:
+                update_all(g, mpdfg_compile, msg_params=(self.sqrt_dk,))
+            elif BREAK_FLAG == 1:
+                update_all(g, mpdfg_plus_reorder, msg_params=(self.sqrt_dk,))
+            else:
+                update_all(g, mpdfg, msg_params=(self.sqrt_dk,))
         elif flag == "batch":
             # use dgl built-in functions as dgl-batch baseline
             g.apply_edges(self.message_func)
@@ -168,8 +183,8 @@ class HGT(nn.Module):
 
 
 def profile(dataset, feat_dim, repeat=1000):
-    log = init_log(["PyG-slice", "DGL-slice",
-                    "Graphiler", "PyG-bmm", "DGL-bmm", "DGL-UDF"], ["time", "mem"])
+    log = init_log(["0-DGL-UDF", "1-DGL-slice", "2-PyG-slice",
+                    "3-DGL-bmm", "4-PyG-bmm", "5-Graphiler"], ["time", "mem"])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim, prepare=False)
     g_hetero, _ = load_data(dataset, feat_dim, to_homo=False)
@@ -184,12 +199,12 @@ def profile(dataset, feat_dim, repeat=1000):
         net.eval()
         with torch.no_grad():
             compile_res = bench(net=net, net_params=(
-                g, features, "compile"), tag="Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
+                g, features, "compile"), tag="5-Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
             res = bench(net=net, net_params=(
-                g, features, "batch"), tag="DGL-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
+                g, features, "batch"), tag="3-DGL-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
             check_equal(compile_res, res)
             bench(net=net, net_params=(g, features, "naive"),
-                  tag="DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="0-DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
         del g, net, compile_res, res
 
     @empty_cache
@@ -206,7 +221,7 @@ def profile(dataset, feat_dim, repeat=1000):
         net_hetero.eval()
         with torch.no_grad():
             bench(net=net_hetero, net_params=(g_hetero, g_hetero.ndata['h']),
-                  tag="DGL-slice", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="1-DGL-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del g_hetero, node_dict, edge_dict, net_hetero
 
     @empty_cache
@@ -220,7 +235,7 @@ def profile(dataset, feat_dim, repeat=1000):
         net_pyg_slice.eval()
         with torch.no_grad():
             bench(net=net_pyg_slice, net_params=(adj, features, g.edata['_TYPE'], g.ndata['_TYPE'], src_type, dst_type),
-                  tag="PyG-slice", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="2-PyG-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del u, v, adj, src_type, dst_type, net_pyg_slice
 
     @empty_cache
@@ -234,13 +249,39 @@ def profile(dataset, feat_dim, repeat=1000):
         net_pyg_bmm.eval()
         with torch.no_grad():
             bench(net=net_pyg_bmm, net_params=(adj, features, g.edata['_TYPE'].to(device), g.ndata['_TYPE'].to(device), src_type, dst_type),
-                  tag="PyG-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="4-PyG-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
         del u, v, adj, src_type, dst_type, net_pyg_bmm
 
     run_baseline_graphiler(g, features)
     run_dgl_slice(g_hetero, features)
     run_pyg_bmm(g, features)
     run_pyg_slice(g, features)
+
+    return log
+
+
+def breakdown(dataset, feat_dim, repeat=1000):
+    log = init_log(['0-DGL-UDF', '1+compile', '2+reorder',
+                   '3+fusion'], ['time', 'mem'])
+    print("benchmarking on: " + dataset)
+    g, features = load_data(dataset, feat_dim)
+    g, features = g.to(device), features.to(device)
+    net = HGT(feat_dim, DEFAULT_DIM,
+              DEFAULT_DIM, g.num_ntypes, g.num_rels).to(device)
+    net.eval()
+    with torch.no_grad():
+        bench(net=net, net_params=(g, features, "naive"),
+              tag="0-DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
+        global BREAK_FLAG
+        BREAK_FLAG = 0
+        bench(net=net, net_params=(
+            g, features, "compile"), tag="1+compile", nvprof=False, repeat=repeat, memory=True, log=log)
+        BREAK_FLAG = 1
+        bench(net=net, net_params=(
+            g, features, "compile"), tag="2+reorder", nvprof=False, repeat=repeat, memory=True, log=log)
+        BREAK_FLAG = 2
+        bench(net=net, net_params=(
+            g, features, "compile"), tag="3+fusion", nvprof=False, repeat=repeat, memory=True, log=log)
 
     return log
 
@@ -255,5 +296,10 @@ if __name__ == '__main__':
         for d in hetero_dataset:
             log[d] = profile(d, DEFAULT_DIM, repeat)
         pd.DataFrame(log).to_pickle("output/HGT.pkl")
+    elif sys.argv[1] == "breakdown":
+        log = {}
+        for d in hetero_dataset:
+            log[d] = breakdown(d, DEFAULT_DIM, repeat)
+        pd.DataFrame(log).to_pickle("output/HGT_breakdown.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]), repeat)

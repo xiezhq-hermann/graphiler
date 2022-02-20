@@ -16,8 +16,12 @@ from GAT_PyG import GAT_PyG
 
 device = setup()
 
+BREAK_FLAG = 2
 
-# pass extra parameters as a workaround
+
+# Currently Graphiler do not support full module compilation
+# therefore, we pass extra parameters as a workaround for class member
+# e.g., self.fc_weight, compare with GATLayer.message_func for the difference
 def message_func(edges: EdgeBatchDummy, fc_weight, attn_weight):
     z_s = torch.mm(edges.src['h'], fc_weight)
     z_d = torch.mm(edges.dst['h'], fc_weight)
@@ -33,6 +37,8 @@ def reduce_func(nodes: NodeBatchDummy):
 
 
 mpdfg = mpdfg_builder(message_func, reduce_func)
+mpdfg_compile = mpdfg_builder(message_func, reduce_func, opt_level=0)
+mpdfg_plus_reorder = mpdfg_builder(message_func, reduce_func, opt_level=1)
 
 
 class GATLayer(nn.Module):
@@ -51,8 +57,15 @@ class GATLayer(nn.Module):
     def forward(self, g, feature, compile=False):
         g.ndata['h'] = feature
         if compile:
-            update_all(g, mpdfg, msg_params=(
-                self.fc_weight, self.attn_weight))
+            if BREAK_FLAG == 0:
+                update_all(g, mpdfg_compile, msg_params=(
+                    self.fc_weight, self.attn_weight))
+            elif BREAK_FLAG == 1:
+                update_all(g, mpdfg_plus_reorder, msg_params=(
+                    self.fc_weight, self.attn_weight))
+            else:
+                update_all(g, mpdfg, msg_params=(
+                    self.fc_weight, self.attn_weight))
         else:
             g.update_all(self.message_func, reduce_func)
         return g.ndata.pop('h')
@@ -72,8 +85,8 @@ class GAT(nn.Module):
 
 
 def profile(dataset, feat_dim, repeat=1000):
-    log = init_log(['DGL-primitives', 'PyG-primitives',
-                   'Graphiler', 'DGL-UDF'], ['time', 'mem'])
+    log = init_log(["0-DGL-UDF", "1-DGL-primitives", "2-PyG-primitives",
+                    "3-Graphiler"], ["time", "mem"])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim, prepare=False)
     features = features.to(device)
@@ -87,9 +100,9 @@ def profile(dataset, feat_dim, repeat=1000):
         net.eval()
         with torch.no_grad():
             compile_res = bench(net=net, net_params=(
-                g, features, True), tag="Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
+                g, features, True), tag="3-Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
             res = bench(net=net, net_params=(g, features, False),
-                        tag="DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
+                        tag="0-DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
             check_equal(compile_res, res)
         del g, net, compile_res, res
 
@@ -103,7 +116,7 @@ def profile(dataset, feat_dim, repeat=1000):
         net_pyg.eval()
         with torch.no_grad():
             bench(net=net_pyg, net_params=(features, adj),
-                  tag="PyG-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="2-PyG-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
         del u, v, adj, net_pyg
 
     @empty_cache
@@ -114,12 +127,39 @@ def profile(dataset, feat_dim, repeat=1000):
         net_dgl.eval()
         with torch.no_grad():
             bench(net=net_dgl, net_params=(g, features),
-                  tag="DGL-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="1-DGL-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
         del g, net_dgl
 
     run_baseline_graphiler(g, features)
     run_pyg(g, features)
     run_dgl(g, features)
+
+    return log
+
+
+def breakdown(dataset, feat_dim, repeat=1000):
+    log = init_log(['0-DGL-UDF', '1+compile', '2+reorder',
+                   '3+fusion'], ['time', 'mem'])
+    print("benchmarking on: " + dataset)
+    g, features = load_data(dataset, feat_dim)
+    g, features = g.to(device), features.to(device)
+
+    net = GAT(in_dim=feat_dim, hidden_dim=DEFAULT_DIM,
+              out_dim=DEFAULT_DIM).to(device)
+    net.eval()
+    with torch.no_grad():
+        bench(net=net, net_params=(g, features, False),
+              tag="0-DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
+        global BREAK_FLAG
+        BREAK_FLAG = 0
+        bench(net=net, net_params=(
+            g, features, True), tag="1+compile", nvprof=False, repeat=repeat, memory=True, log=log)
+        BREAK_FLAG = 1
+        bench(net=net, net_params=(
+            g, features, True), tag="2+reorder", nvprof=False, repeat=repeat, memory=True, log=log)
+        BREAK_FLAG = 2
+        bench(net=net, net_params=(
+            g, features, True), tag="3+fusion", nvprof=False, repeat=repeat, memory=True, log=log)
 
     return log
 
@@ -134,5 +174,10 @@ if __name__ == '__main__':
         for d in homo_dataset:
             log[d] = profile(d, homo_dataset[d], repeat)
         pd.DataFrame(log).to_pickle("output/GAT.pkl")
+    elif sys.argv[1] == "breakdown":
+        log = {}
+        for d in homo_dataset:
+            log[d] = breakdown(d, homo_dataset[d], repeat)
+        pd.DataFrame(log).to_pickle("output/GAT_breakdown.pkl")
     else:
         profile(sys.argv[1], int(sys.argv[2]), repeat)

@@ -1,6 +1,7 @@
 import sys
 import inspect
 from pathlib import Path
+from importlib import reload
 
 import torch
 from graphiler import EdgeBatchDummy, NodeBatchDummy, optimizer
@@ -52,8 +53,9 @@ def mpdfg_builder(msg_func, reduce_func, update_func=None, opt_level=2):
         f.write(mpdfg_func)
 
     # import source code template for scripting
-    from mpdfg_temp import mpdfg_func
-    mpdfg_func = torch.jit.script(mpdfg_func)
+    import mpdfg_temp
+    reload(mpdfg_temp)
+    mpdfg_func = torch.jit.script(mpdfg_temp.mpdfg_func)
     mpdfg = MPDFG(mpdfg_func)
 
     # Todo: inline or not inline?
@@ -62,12 +64,12 @@ def mpdfg_builder(msg_func, reduce_func, update_func=None, opt_level=2):
     update_func = torch.jit.script(
         update_func).inlined_graph if update_func else None
 
-    print(msg_func)
-    print(reduce_func)
-    print(update_func)
+    print("UDF message function:\n", msg_func)
+    print("UDF reduce function:\n", reduce_func)
+    print("UDF update function:\n", update_func)
 
     builder(mpdfg.annotations, msg_func, reduce_func, update_func)
     optimizer(mpdfg.annotations, opt_level)
-    print(mpdfg.forward.graph)
+    print("MPDFG:\n", mpdfg.forward.graph)
 
     return mpdfg

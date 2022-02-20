@@ -14,10 +14,14 @@ from RGCN_PyG import RGCN_PyG
 
 device = setup()
 
-# to successfully benchmark this model using Seastar, a smaller feature dimension is used
+# to successfully benchmark this model using Seastar
+# a smaller feature dimension is used in the paper
 RGCN_FEAT_DIM = 16
 
 
+# note: for heterogenous GNNs, instead of remaining compatible with DGL interface
+# we introduce a simplified interface: edges.type['weight'] v.s. weight[edges.data['_TYPE']]
+# which is consistent to designs for ndata and edata and might be adopted in DGL
 def message_func(edges: EdgeBatchDummy):
     relation_weight = edges.type['weight']
     msg = torch.bmm(edges.src['h'].unsqueeze(1), relation_weight).squeeze()
@@ -71,8 +75,8 @@ class RGCN(nn.Module):
 
 
 def profile(dataset, feat_dim, repeat=1000):
-    log = init_log(["PyG-slice", "DGL-slice",
-                    "Graphiler", "PyG-bmm", "DGL-bmm", "DGL-UDF"], ["time", "mem"])
+    log = init_log(["0-DGL-UDF", "1-DGL-slice", "2-PyG-slice",
+                    "3-DGL-bmm", "4-PyG-bmm", "5-Graphiler"], ["time", "mem"])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim, prepare=False)
     g_hetero, _ = load_data(dataset, feat_dim, to_homo=False)
@@ -88,9 +92,9 @@ def profile(dataset, feat_dim, repeat=1000):
         net.eval()
         with torch.no_grad():
             compile_res = bench(net=net, net_params=(
-                g, features, norm, True), tag="Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
+                g, features, norm, True), tag="5-Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
             res = bench(net=net, net_params=(g, features, norm, False),
-                        tag="DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
+                        tag="0-DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
             check_equal(compile_res, res)
         del g, norm, net, compile_res, res
 
@@ -103,7 +107,7 @@ def profile(dataset, feat_dim, repeat=1000):
         net_dgl_hetero.eval()
         with torch.no_grad():
             bench(net=net_dgl_hetero, net_params=(
-                g_hetero, g_hetero.ndata['h']), tag="DGL-slice", nvprof=False, repeat=repeat, memory=True, log=log)
+                g_hetero, g_hetero.ndata['h']), tag="1-DGL-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del g_hetero, rel_names, net_dgl_hetero
 
     @empty_cache
@@ -116,7 +120,7 @@ def profile(dataset, feat_dim, repeat=1000):
         net_pyg_bmm.eval()
         with torch.no_grad():
             bench(net=net_pyg_bmm, net_params=(adj, features, edge_type),
-                  tag="PyG-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="4-PyG-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
         del edge_type, u, v, adj, net_pyg_bmm
 
     @empty_cache
@@ -128,7 +132,7 @@ def profile(dataset, feat_dim, repeat=1000):
         net_dgl.eval()
         with torch.no_grad():
             bench(net=net_dgl, net_params=(
-                g, features, g.edata['_TYPE'], norm), tag="DGL-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
+                g, features, g.edata['_TYPE'], norm), tag="3-DGL-bmm", nvprof=False, repeat=repeat, memory=True, log=log)
         del g, norm, net_dgl
 
     @empty_cache
@@ -141,7 +145,7 @@ def profile(dataset, feat_dim, repeat=1000):
         net_pyg_slice.eval()
         with torch.no_grad():
             bench(net=net_pyg_slice, net_params=(adj, features, edge_type),
-                  tag="PyG-slice", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="2-PyG-slice", nvprof=False, repeat=repeat, memory=True, log=log)
         del edge_type, u, v, adj, net_pyg_slice
 
     run_baseline_graphiler(g, features)

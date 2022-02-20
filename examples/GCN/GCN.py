@@ -16,6 +16,8 @@ from GCN_PyG import GCN_PyG
 device = setup()
 
 
+# For GCN, to apply Graphiler, the only necessary modification to code
+# is type annotation for parameters, i.e., EdgeBatchDummy and NodeBatchDummy
 def message_func(edges: EdgeBatchDummy):
     norm = torch.pow(edges.src['degree'], -0.5)
     return {'m': edges.src['h'] * norm}
@@ -57,8 +59,8 @@ class GCN(nn.Module):
 
 
 def profile(dataset, feat_dim, repeat=1000):
-    log = init_log(["DGL-primitives", "PyG-primitives",
-                    "Graphiler", "DGL-UDF"], ["time", "mem"])
+    log = init_log(["0-DGL-UDF", "1-DGL-primitives", "2-PyG-primitives",
+                    "3-Graphiler"], ["time", "mem"])
     print("benchmarking on: " + dataset)
     g, features = load_data(dataset, feat_dim, prepare=False)
     features = features.to(device)
@@ -72,9 +74,9 @@ def profile(dataset, feat_dim, repeat=1000):
         net.eval()
         with torch.no_grad():
             compile_res = bench(net=net, net_params=(
-                g, features, True), tag="Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
+                g, features, True), tag="3-Graphiler", nvprof=False, repeat=repeat, memory=True, log=log)
             res = bench(net=net, net_params=(g, features, False),
-                        tag="DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
+                        tag="0-DGL-UDF", nvprof=False, repeat=repeat, memory=True, log=log)
             check_equal(compile_res, res)
         del g, net, compile_res, res
 
@@ -88,7 +90,7 @@ def profile(dataset, feat_dim, repeat=1000):
         net_pyg.eval()
         with torch.no_grad():
             bench(net=net_pyg, net_params=(features, adj),
-                  tag="PyG-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="2-PyG-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
         return u, v, adj, net_pyg
 
     @empty_cache
@@ -99,7 +101,7 @@ def profile(dataset, feat_dim, repeat=1000):
         net_dgl.eval()
         with torch.no_grad():
             bench(net=net_dgl, net_params=(g, features),
-                  tag="DGL-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
+                  tag="1-DGL-primitives", nvprof=False, repeat=repeat, memory=True, log=log)
 
     run_baseline_and_graphiler(g, features)
     run_pyg(g, features)
