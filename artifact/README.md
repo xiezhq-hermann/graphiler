@@ -58,3 +58,38 @@ python $GRAPHILER/examples/GAT/GAT.py breakdown 0
 bash $GRAPHILER/artifact/visualize.sh GAT_breakdown
 ```
 Breakdown analysis of running time and memory comsuption comparison figures for `GAT` and `HGT` with different datasets will be generated in `output`.
+
+### Performance Reference
+<p align="center">
+
+<b>GCN</b>
+
+  <img src="reference/GCN_time.svg" width="600">
+  <img src="reference/GCN_mem.svg" width="600">
+
+<b>GAT</b>
+
+  <img src="reference/GAT_time.svg" width="600">
+  <img src="reference/GAT_mem.svg" width="600">
+
+<b>RGCN</b>
+
+  <img src="reference/RGCN_time.svg" width="600">
+  <img src="reference/RGCN_mem.svg" width="600">
+
+<b>HGT</b>
+
+  <img src="reference/HGT_time.svg" width="600">
+  <img src="reference/HGT_mem.svg" width="600">
+
+<b>GAT Breakdown</b>
+
+  <img src="reference/GAT_breakdown_time.svg" width="600">
+  <img src="reference/GAT_breakdown_mem.svg" width="600">
+
+<b>HGT Breakdown</b>
+
+  <img src="reference/HGT_breakdown_time.svg" width="600">
+  <img src="reference/HGT_breakdown_mem.svg" width="600">
+
+</p>

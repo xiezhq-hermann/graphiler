@@ -16,8 +16,7 @@ torch.classes.load_library(DGL_PATH + "libgraphiler.so")
 homo_dataset = {"cora": 1433, "pubmed": 500,
                 "ppi": 50, "arxiv": 128, "reddit": 602}
 
-hetero_dataset = ["debug_hetero", "aifb", "mutag",
-                  "bgs", "biokg", "am"]
+hetero_dataset = ["aifb", "mutag", "bgs", "biokg", "am"]
 
 
 def load_data(name, feat_dim=DEFAULT_DIM, prepare=True, to_homo=True):

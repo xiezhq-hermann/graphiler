@@ -31,13 +31,15 @@ NO_ANIMATION = 1
 plot '{filename}.dat' using 2:xtic(1) fs p 3 fc ls 5 lw 3 ti col,\
     '' using ($0-.36):(y_pos($2)):(to_str($2)) with labels notitle rotate left font ",16",\
     '' u 3 fs p 4 fc ls 3 lw 3 ti col,\
-    '' using ($0-.18):(y_pos($3)):(to_str($3)) with labels notitle rotate left font ",16",\
+    '' using ($0-.22):(y_pos($3)):(to_str($3)) with labels notitle rotate left font ",16",\
     '' u 4 fs p 5 fc ls 4 lw 3 ti col,\
-    '' using ($0+.0):(y_pos($4)):(to_str($4)) with labels notitle rotate left font ",16", \
+    '' using ($0-.07):(y_pos($4)):(to_str($4)) with labels notitle rotate left font ",16", \
     '' u 5 fs p 10 fc ls 2 lw 3 ti col,\
-    '' using ($0+.18):(y_pos($5)):(to_str($5)) with labels notitle rotate left font ",16",\
+    '' using ($0+.07):(y_pos($5)):(to_str($5)) with labels notitle rotate left font ",16",\
     '' u 6 fs p 6 fc ls 6 lw 3 ti col,\
-    '' using ($0+.36):(y_pos($6)):(to_str($6)) with labels notitle rotate left font ",16"
+    '' using ($0+.22):(y_pos($6)):(to_str($6)) with labels notitle rotate left font ",16", \
+    '' u 7 fs p 10 fc ls 6 lw 3 ti col,\
+    '' using ($0+.36):(y_pos($7)):(to_str($7)) with labels notitle rotate left font ",16"
     """,
     "mem": r"""set terminal postscript "Times, 20" eps color dashed size 7,2.8
 set output "{filename}.ps"
@@ -53,7 +55,7 @@ set xtics border in scale 0,0 nomirror norotate autojustify
 set ytics nomirror
 
 set xlabel "Dataset" font "Times, 24"
-set ylabel "GPU Memory Usage/MB" font "Times, 24"
+set ylabel "GPU Memory Usage / MB" font "Times, 24"
 set yrange [0:16000]
 
 set offset -0.3, -0.3, 0, 0
@@ -66,13 +68,15 @@ NO_ANIMATION = 1
 plot '{filename}.dat' using 2:xtic(1) fs p 3 fc ls 5 lw 3 ti col,\
     '' using ($0-.36):($2+50):($2>0 ? sprintf("%3d",$2): "OOM") with labels notitle rotate left font ",20",\
     '' u 3 fs p 4 fc ls 3 lw 3 ti col,\
-    '' using ($0-.18):($3+50):($3>0 ? sprintf("%3d",$3): "OOM") with labels notitle rotate left font ",20",\
+    '' using ($0-.22):($3+50):($3>0 ? sprintf("%3d",$3): "OOM") with labels notitle rotate left font ",20",\
     '' u 4 fs p 5 fc ls 4 lw 3 ti col,\
-    '' using ($0):($4+50):($4>0 ? sprintf("%3d",$4): "OOM") with labels notitle rotate left font ",20", \
+    '' using ($0-.07):($4+50):($4>0 ? sprintf("%3d",$4): "OOM") with labels notitle rotate left font ",20", \
     '' u 5 fs p 10 fc ls 2 lw 3 ti col,\
-    '' using ($0+.18):($5+50):($5>0 ? sprintf("%3d",$5): "OOM") with labels notitle rotate left font ",20",\
+    '' using ($0+.07):($5+50):($5>0 ? sprintf("%3d",$5): "OOM") with labels notitle rotate left font ",20",\
     '' u 6 fs p 6 fc ls 6 lw 3 ti col,\
-    '' using ($0+.36):($6+50):($6>0 ? sprintf("%3d",$6): "OOM") with labels notitle rotate left font ",20",
+    '' using ($0+.22):($6+50):($6>0 ? sprintf("%3d",$6): "OOM") with labels notitle rotate left font ",20", \
+    '' u 7 fs p 10 fc ls 6 lw 3 ti col,\
+    '' using ($0+.36):($7+50):($7>0 ? sprintf("%3d",$7): "OOM") with labels notitle rotate left font ",20"
     """
 }
 
