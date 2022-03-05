@@ -1,4 +1,6 @@
 # Graphiler
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6331245.svg)](https://doi.org/10.5281/zenodo.6331245)
+
 Graphiler is a compiler stack built on top of DGL and TorchScript which compiles GNNs defined using user-defined functions (UDFs) into efficient execution plans. 
 This allows creating high performance models while retaining the simplicity and expressiveness of the UDF interface.
 
