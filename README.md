@@ -82,3 +82,18 @@ python $GRAPHILER/examples/GAT/GAT.py pubmed 500
 
 ### Artifact Evaluation
 Please go `artifact` directory for more information.
+
+### Reference
+To cite Graphiler in your paper:
+```
+@inproceedings{graphiler,
+ author = {Xie, Zhiqiang and Wang, Minjie and Ye, Zihao and Zhang, Zheng and Fan, Rui},
+ booktitle = {Proceedings of Machine Learning and Systems},
+ editor = {D. Marculescu and Y. Chi and C. Wu},
+ pages = {515--528},
+ title = {Graphiler: Optimizing Graph Neural Networks with Message Passing Data Flow Graph},
+ url = {https://proceedings.mlsys.org/paper/2022/file/a87ff679a2f3e71d9181a67b7542122c-Paper.pdf},
+ volume = {4},
+ year = {2022}
+}
+```
